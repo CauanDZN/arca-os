@@ -13,6 +13,14 @@ import { ScoreBar } from "@/app/components/ScoreBar";
 import { StatTile } from "@/app/components/StatTile";
 import { SparklesIcon } from "@/app/components/icons";
 
+const SECTIONS = [
+  { id: "sumario", label: "Sumário" },
+  { id: "maturidade", label: "Maturidade" },
+  { id: "analitico", label: "Diagnóstico" },
+  { id: "priorizacao", label: "Priorização" },
+  { id: "plano", label: "Plano de Ação" },
+];
+
 export default async function RelatorioPage({
   params,
 }: {
@@ -41,6 +49,8 @@ export default async function RelatorioPage({
     (aiNarrative?.areaInsights ?? []).map((i) => [i.areaKey, i])
   );
   const evidenceGaps = findEvidenceGaps(diagnostic.answers);
+  const missingEvidence = new Set(evidenceGaps.map((g) => `${g.areaKey}::${g.questionText}`));
+  const areasWithGaps = report.areaScores.filter((a) => a.weakestQuestions.length > 0);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4 print:bg-white">
@@ -60,34 +70,38 @@ export default async function RelatorioPage({
           </div>
         </div>
 
+        {/* In-page section nav — this report has 5 sections and can get long */}
+        <nav className="print:hidden flex flex-wrap gap-1.5 text-xs font-medium">
+          {SECTIONS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
+
         {evidenceGaps.length > 0 && (
-          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5">
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2">
-              <SparklesIcon className="w-3.5 h-3.5" />
-              Agente de Auditoria de Evidências · {evidenceGaps.length}{" "}
-              {evidenceGaps.length === 1 ? "alerta" : "alertas"}
+          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4">
+            <p className="flex items-center gap-1.5 text-sm text-amber-900">
+              <SparklesIcon className="w-4 h-4 shrink-0" />
+              <span>
+                <span className="font-semibold">Agente de Auditoria de Evidências:</span>{" "}
+                {evidenceGaps.length} {evidenceGaps.length === 1 ? "resposta crítica está" : "respostas críticas estão"}{" "}
+                sem evidência anexada.{" "}
+                <a href="#analitico" className="underline hover:no-underline">
+                  Veja marcadas em Diagnóstico Analítico
+                </a>
+                .
+              </span>
             </p>
-            <p className="text-sm text-amber-900 mb-3">
-              As respostas críticas abaixo não têm evidência anexada e estão dirigindo o
-              relatório e o plano de ação sem nada que as comprove. Volte ao questionário e
-              anexe uma evidência para cada uma.
-            </p>
-            <ul className="space-y-1.5 text-sm text-amber-900">
-              {evidenceGaps.map((gap) => (
-                <li key={`${gap.areaKey}-${gap.questionText}`} className="flex items-start gap-2">
-                  <span className="text-amber-500 mt-0.5">•</span>
-                  <span>
-                    <span className="font-medium">{gap.areaName}:</span> {gap.questionText}{" "}
-                    <span className="text-amber-600">(nota {gap.score})</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
           </div>
         )}
 
         {/* 1. Sumário Executivo */}
-        <Card>
+        <Card id="sumario">
           <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             Relatório Executivo · Arca Scan 360
           </p>
@@ -150,7 +164,7 @@ export default async function RelatorioPage({
         </Card>
 
         {/* 2. Mapa de Maturidade por Área */}
-        <Card>
+        <Card id="maturidade">
           <h2 className="text-xl font-bold text-slate-900 mb-4">
             Mapa de Maturidade por Área
           </h2>
@@ -183,26 +197,41 @@ export default async function RelatorioPage({
         </Card>
 
         {/* 3. Diagnóstico Analítico */}
-        <Card>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">
-            Diagnóstico Analítico
-          </h2>
-          <div className="space-y-5">
-            {report.areaScores
-              .filter((a) => a.weakestQuestions.length > 0)
-              .map((a: AreaScore) => {
-                const insight = aiInsightByArea.get(a.area.key);
-                return (
-                  <div key={a.area.key} className="border-b border-slate-100 pb-4 last:border-0">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-slate-900">{a.area.name}</h3>
-                      <Badge text={a.status} tone={statusTone(a.status)} />
-                    </div>
+        <Card id="analitico">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              Diagnóstico Analítico
+            </h2>
+            <span className="text-xs text-slate-400">{areasWithGaps.length} áreas com gaps</span>
+          </div>
+          <div className="space-y-2">
+            {areasWithGaps.map((a: AreaScore) => {
+              const insight = aiInsightByArea.get(a.area.key);
+              const gapsInArea = a.weakestQuestions.filter((q) =>
+                missingEvidence.has(`${a.area.key}::${q.text}`)
+              ).length;
+              return (
+                <details key={a.area.key} className="group rounded-lg border border-slate-200 open:bg-slate-50/60">
+                  <summary className="flex items-center gap-3 cursor-pointer select-none px-4 py-3 list-none">
+                    <span className="text-slate-400 text-xs transition-transform group-open:rotate-90">▶</span>
+                    <span className="font-medium text-slate-900 flex-1">{a.area.name}</span>
+                    {gapsInArea > 0 && (
+                      <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                        {gapsInArea} sem evidência
+                      </span>
+                    )}
+                    <Badge text={a.status} tone={statusTone(a.status)} />
+                  </summary>
+                  <div className="px-4 pb-4 pt-1">
                     <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
                       {a.weakestQuestions.map((q) => (
                         <li key={q.text}>
-                          {q.text}{" "}
-                          <span className="text-slate-400">(nota {q.score})</span>
+                          {q.text} <span className="text-slate-400">(nota {q.score})</span>
+                          {missingEvidence.has(`${a.area.key}::${q.text}`) && (
+                            <span className="ml-1.5 text-xs font-medium text-amber-700">
+                              · sem evidência
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -219,13 +248,14 @@ export default async function RelatorioPage({
                       </div>
                     )}
                   </div>
-                );
-              })}
+                </details>
+              );
+            })}
           </div>
         </Card>
 
         {/* 4. Matriz de Priorização */}
-        <Card>
+        <Card id="priorizacao">
           <h2 className="text-xl font-bold text-slate-900 mb-4">
             Matriz de Priorização
           </h2>
@@ -254,7 +284,7 @@ export default async function RelatorioPage({
         </Card>
 
         {/* 5. Plano de Ação Recomendado */}
-        <Card>
+        <Card id="plano">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="text-xl font-bold text-slate-900">
               Plano de Ação Recomendado
@@ -277,7 +307,7 @@ export default async function RelatorioPage({
               </form>
             )}
           </div>
-          <div className="space-y-8">
+          <div className="space-y-3">
             <ActionBlock title="Primeiros 30 dias" items={report.actionPlan.days30} />
             <ActionBlock title="31 a 90 dias" items={report.actionPlan.days90} />
             <ActionBlock title="3 a 12 meses" items={report.actionPlan.months12} />
@@ -302,13 +332,17 @@ function ActionBlock({
 }) {
   if (items.length === 0) return null;
   return (
-    <div>
-      <h3 className="font-semibold text-slate-900 mb-3">{title}</h3>
-      <div className="space-y-2">
+    <details className="group rounded-lg border border-slate-200 open:bg-slate-50/60" open={items.length <= 5}>
+      <summary className="flex items-center gap-3 cursor-pointer select-none px-4 py-3 list-none">
+        <span className="text-slate-400 text-xs transition-transform group-open:rotate-90">▶</span>
+        <span className="font-semibold text-slate-900 flex-1">{title}</span>
+        <span className="text-xs text-slate-400">{items.length} ações</span>
+      </summary>
+      <div className="px-4 pb-4 pt-1 space-y-2">
         {items.map((item, i) => (
           <div
             key={i}
-            className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-3 hover:border-slate-300 transition-colors"
+            className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3 hover:border-slate-300 transition-colors"
           >
             <div>
               <p className="text-xs text-slate-500">{item.areaName}</p>
@@ -318,6 +352,6 @@ function ActionBlock({
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
