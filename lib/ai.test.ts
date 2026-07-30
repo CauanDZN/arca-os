@@ -16,12 +16,18 @@ const report = buildReport([]);
 
 describe("generateAiNarrative", () => {
   const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     mockGenerateContent.mockReset();
+    // generateAiNarrative logs failures via console.error on purpose (useful in production
+    // when the AI call breaks silently) — several tests below intentionally trigger that
+    // failure path, so silence the expected noise here instead of removing the real log.
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    consoleErrorSpy.mockRestore();
     if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = originalKey;
   });
