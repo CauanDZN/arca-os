@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { EmptyBoxIcon } from "@/app/components/icons";
 
 export default async function EmpresasPage() {
   const companies = await prisma.company.findMany({
@@ -25,11 +26,18 @@ export default async function EmpresasPage() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
           {companies.length === 0 ? (
-            <p className="text-sm text-slate-500 text-center py-10">
-              Nenhuma empresa cadastrada ainda.
-            </p>
+            <div className="flex flex-col items-center gap-2 text-center py-14">
+              <EmptyBoxIcon className="w-10 h-10 text-slate-300" />
+              <p className="text-sm text-slate-500">Nenhuma empresa cadastrada ainda.</p>
+              <Link
+                href="/diagnostico/novo"
+                className="mt-1 text-sm font-medium text-blue-700 hover:underline"
+              >
+                Iniciar o primeiro diagnóstico →
+              </Link>
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -43,7 +51,7 @@ export default async function EmpresasPage() {
               </thead>
               <tbody>
                 {companies.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 last:border-0">
+                  <tr key={c.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-4 font-medium text-slate-800">{c.name}</td>
                     <td className="py-3 px-4 text-slate-600">{c.segment || "—"}</td>
                     <td className="py-3 px-4 text-slate-600">{c.diagnostics.length}</td>

@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { Card } from "@/app/components/Card";
+import { Badge } from "@/app/components/Badge";
+import { SparklesIcon } from "@/app/components/icons";
 
 type Agent = {
   name: string;
   description: string;
   status: "ativo" | "planejado";
+  requiresGemini?: boolean;
+  seeItAt?: { href: string; label: string };
 };
 
 type AgentGroup = {
@@ -22,6 +27,8 @@ const GROUPS: AgentGroup[] = [
         description:
           "Lê as notas e gaps de cada área e escreve o sumário executivo, a causa raiz e a recomendação da Arca por área (via Gemini).",
         status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/relatorios", label: "Ver no relatório" },
       },
       {
         name: "Agente de Diagnóstico Financeiro / Comercial / Fiscal / RH / Tecnologia",
@@ -68,8 +75,11 @@ const GROUPS: AgentGroup[] = [
     agents: [
       {
         name: "Agente de Evolução de Maturidade",
-        description: "Compara a nota geral e por área entre diagnósticos sucessivos da mesma empresa e explica o que mudou.",
-        status: "planejado",
+        description:
+          "Compara a nota geral e por área entre os dois diagnósticos mais recentes da mesma empresa e explica o que mudou (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/empresas", label: "Ver no cockpit da empresa" },
       },
     ],
   },
@@ -79,8 +89,10 @@ const GROUPS: AgentGroup[] = [
     agents: [
       {
         name: "Agente de Auditoria de Evidências",
-        description: "Verifica se cada nota crítica tem evidência anexada no Data Room antes de entrar no relatório final.",
-        status: "planejado",
+        description:
+          "Verifica se cada resposta crítica (nota ≤ 2) tem evidência anexada antes de entrar no relatório final — regra de negócio, roda em toda geração de relatório.",
+        status: "ativo",
+        seeItAt: { href: "/relatorios", label: "Ver no relatório" },
       },
     ],
   },
@@ -96,8 +108,11 @@ export default function AgentesPage() {
           ← Empresas
         </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-          <p className="text-sm font-semibold text-blue-700 uppercase mb-1">ArcaOS</p>
+        <Card>
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+            <SparklesIcon className="w-4 h-4" />
+            ArcaOS
+          </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Central de Agentes de IA</h1>
           <p className="text-slate-600">
             Roadmap dos agentes previstos no plano estratégico da Arca. Marcados como{" "}
@@ -105,35 +120,46 @@ export default function AgentesPage() {
             ligados nesta versão do produto; os demais são{" "}
             <span className="font-semibold text-slate-500">planejados</span> para as próximas fases.
           </p>
-        </div>
+        </Card>
 
         {GROUPS.map((group) => (
-          <div key={group.title} className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+          <Card key={group.title}>
             <h2 className="text-lg font-bold text-slate-900">{group.title}</h2>
             <p className="text-sm text-slate-500 mb-4">{group.purpose}</p>
             <div className="space-y-3">
               {group.agents.map((agent) => (
                 <div
                   key={agent.name}
-                  className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-4"
+                  className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
                 >
                   <div>
                     <p className="font-medium text-slate-900">{agent.name}</p>
                     <p className="text-sm text-slate-600">{agent.description}</p>
+                    {agent.status === "ativo" && agent.seeItAt && (
+                      <Link
+                        href={agent.seeItAt.href}
+                        className="inline-block mt-1.5 text-xs font-medium text-blue-700 hover:underline"
+                      >
+                        {agent.seeItAt.label} →
+                      </Link>
+                    )}
                   </div>
-                  {agent.status === "ativo" ? (
-                    <span className="shrink-0 inline-block rounded-full bg-green-100 text-green-700 border border-green-200 px-2.5 py-0.5 text-xs font-semibold">
-                      {hasGeminiKey ? "Ativo" : "Ativo (sem chave configurada)"}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 inline-block rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-0.5 text-xs font-semibold">
-                      Planejado
-                    </span>
-                  )}
+                  <div className="shrink-0">
+                    <Badge
+                      text={
+                        agent.status === "ativo"
+                          ? agent.requiresGemini && !hasGeminiKey
+                            ? "Ativo (sem chave configurada)"
+                            : "Ativo"
+                          : "Planejado"
+                      }
+                      tone={agent.status === "ativo" ? "good" : "neutral"}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </main>

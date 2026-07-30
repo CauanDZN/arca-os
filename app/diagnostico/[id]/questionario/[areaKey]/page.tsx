@@ -66,9 +66,9 @@ export default async function QuestionarioAreaPage({
 
         <form
           action={action}
-          className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mt-4"
+          className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-8 mt-4"
         >
-          <p className="text-sm font-semibold text-blue-700 uppercase mb-1">
+          <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             Área {areaIndex + 1} de {AREAS.length}
           </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-1">
@@ -107,7 +107,7 @@ export default async function QuestionarioAreaPage({
                           className="peer sr-only"
                           required
                         />
-                        <div className="rounded-lg border border-slate-300 py-2 text-sm font-semibold text-slate-600 peer-checked:bg-blue-700 peer-checked:text-white peer-checked:border-blue-700 hover:bg-slate-100 transition-colors">
+                        <div className="rounded-lg border border-slate-300 py-2 text-sm font-semibold text-slate-600 peer-checked:bg-status-managed peer-checked:text-white peer-checked:border-status-managed hover:bg-slate-100 transition-colors">
                           {score}
                         </div>
                       </label>
@@ -127,7 +127,7 @@ export default async function QuestionarioAreaPage({
                           type="text"
                           name={`${q.id}__evidence`}
                           defaultValue={existing?.evidence ?? ""}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
                         />
                       </label>
                       <label className="block">
@@ -138,7 +138,7 @@ export default async function QuestionarioAreaPage({
                           type="text"
                           name={`${q.id}__responsible`}
                           defaultValue={existing?.responsible ?? ""}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
                         />
                       </label>
                       <label className="block">
@@ -148,7 +148,7 @@ export default async function QuestionarioAreaPage({
                         <select
                           name={`${q.id}__impact`}
                           defaultValue={existing?.impact ?? "Médio"}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
                         >
                           {IMPACT_OPTIONS.map((o) => (
                             <option key={o} value={o}>
@@ -164,7 +164,7 @@ export default async function QuestionarioAreaPage({
                         <select
                           name={`${q.id}__urgency`}
                           defaultValue={existing?.urgency ?? "Média"}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
                         >
                           {URGENCY_OPTIONS.map((o) => (
                             <option key={o} value={o}>
@@ -180,7 +180,7 @@ export default async function QuestionarioAreaPage({
                         <select
                           name={`${q.id}__risk`}
                           defaultValue={existing?.risk ?? "Operacional"}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
                         >
                           {RISK_OPTIONS.map((o) => (
                             <option key={o} value={o}>
@@ -209,7 +209,7 @@ export default async function QuestionarioAreaPage({
             )}
             <button
               type="submit"
-              className="rounded-lg bg-blue-700 text-white font-semibold px-6 py-3 hover:bg-blue-800 transition-colors"
+              className="rounded-lg bg-blue-700 text-white font-semibold px-6 py-3 hover:bg-blue-800 transition-colors shadow-sm shadow-blue-700/20"
             >
               {isLast ? "Concluir e gerar relatório" : "Próxima área →"}
             </button>
@@ -230,7 +230,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
       </div>
       <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
         <div
-          className="h-full bg-blue-700 transition-all"
+          className="h-full rounded-full bg-status-managed transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>

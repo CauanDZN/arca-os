@@ -3,51 +3,15 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildReport, type AreaScore } from "@/lib/scoring";
 import type { AiNarrative } from "@/lib/ai";
+import { findEvidenceGaps } from "@/lib/audit";
+import { statusTone, classificationTone, priorityTone } from "@/lib/badge-tones";
 import { PrintButton } from "./PrintButton";
 import { approveActionPlan } from "@/app/actions-project";
-
-const STATUS_STYLES: Record<string, string> = {
-  "Crítico": "bg-red-100 text-red-700 border-red-200",
-  "Frágil": "bg-orange-100 text-orange-700 border-orange-200",
-  "Em estruturação": "bg-yellow-100 text-yellow-700 border-yellow-200",
-  "Gerenciado": "bg-blue-100 text-blue-700 border-blue-200",
-  "Otimizado": "bg-green-100 text-green-700 border-green-200",
-};
-
-const CLASS_STYLES: Record<string, string> = {
-  "Estrutural": "bg-red-100 text-red-700 border-red-200",
-  "Quick Win": "bg-green-100 text-green-700 border-green-200",
-  "Corretiva": "bg-orange-100 text-orange-700 border-orange-200",
-  "Estratégica": "bg-blue-100 text-blue-700 border-blue-200",
-  "Não prioritária": "bg-slate-100 text-slate-600 border-slate-200",
-};
-
-const PRIORITY_STYLES: Record<string, string> = {
-  Alta: "bg-red-100 text-red-700",
-  Média: "bg-yellow-100 text-yellow-700",
-  Baixa: "bg-slate-100 text-slate-600",
-};
-
-function Badge({ text, styles }: { text: string; styles: Record<string, string> }) {
-  return (
-    <span
-      className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-        styles[text] ?? "bg-slate-100 text-slate-600 border-slate-200"
-      }`}
-    >
-      {text}
-    </span>
-  );
-}
-
-function ScoreBar({ score }: { score: number }) {
-  const pct = (score / 5) * 100;
-  return (
-    <div className="h-2 w-32 rounded-full bg-slate-200 overflow-hidden">
-      <div className="h-full bg-blue-700" style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
+import { Card } from "@/app/components/Card";
+import { Badge } from "@/app/components/Badge";
+import { ScoreBar } from "@/app/components/ScoreBar";
+import { StatTile } from "@/app/components/StatTile";
+import { SparklesIcon } from "@/app/components/icons";
 
 export default async function RelatorioPage({
   params,
@@ -76,10 +40,11 @@ export default async function RelatorioPage({
   const aiInsightByArea = new Map(
     (aiNarrative?.areaInsights ?? []).map((i) => [i.areaKey, i])
   );
+  const evidenceGaps = findEvidenceGaps(diagnostic.answers);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4 print:bg-white">
-      <div className="mx-auto max-w-4xl space-y-8">
+      <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex items-center justify-between print:hidden">
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-800">
             ← Voltar ao início
@@ -87,7 +52,7 @@ export default async function RelatorioPage({
           <div className="flex gap-2">
             <a
               href={`/api/diagnostico/${id}/pdf`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
               Baixar PDF
             </a>
@@ -95,9 +60,35 @@ export default async function RelatorioPage({
           </div>
         </div>
 
+        {evidenceGaps.length > 0 && (
+          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2">
+              <SparklesIcon className="w-3.5 h-3.5" />
+              Agente de Auditoria de Evidências · {evidenceGaps.length}{" "}
+              {evidenceGaps.length === 1 ? "alerta" : "alertas"}
+            </p>
+            <p className="text-sm text-amber-900 mb-3">
+              As respostas críticas abaixo não têm evidência anexada e estão dirigindo o
+              relatório e o plano de ação sem nada que as comprove. Volte ao questionário e
+              anexe uma evidência para cada uma.
+            </p>
+            <ul className="space-y-1.5 text-sm text-amber-900">
+              {evidenceGaps.map((gap) => (
+                <li key={`${gap.areaKey}-${gap.questionText}`} className="flex items-start gap-2">
+                  <span className="text-amber-500 mt-0.5">•</span>
+                  <span>
+                    <span className="font-medium">{gap.areaName}:</span> {gap.questionText}{" "}
+                    <span className="text-amber-600">(nota {gap.score})</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* 1. Sumário Executivo */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-          <p className="text-sm font-semibold text-blue-700 uppercase mb-1">
+        <Card>
+          <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             Relatório Executivo · Arca Scan 360
           </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-4">
@@ -105,34 +96,32 @@ export default async function RelatorioPage({
           </h1>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-4">
-              <p className="text-xs text-slate-500 mb-1">Nota geral de maturidade</p>
-              <p className="text-3xl font-bold text-slate-900">
+            <StatTile label="Nota geral de maturidade">
+              <p className="text-3xl font-bold text-slate-900 mb-1">
                 {report.overallAverage.toFixed(1)}
                 <span className="text-base text-slate-400">/5</span>
               </p>
-              <Badge text={report.overallStatus} styles={STATUS_STYLES} />
-            </div>
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-4">
-              <p className="text-xs text-slate-500 mb-1">Segmento</p>
+              <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
+            </StatTile>
+            <StatTile label="Segmento">
               <p className="text-slate-900 font-medium">{diagnostic.company.segment || "—"}</p>
               <p className="text-xs text-slate-500 mt-2 mb-1">Objetivo do diagnóstico</p>
               <p className="text-slate-700 text-sm">{objectives.join(", ") || "—"}</p>
-            </div>
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-4">
-              <p className="text-xs text-slate-500 mb-1">Faturamento médio / margem</p>
+            </StatTile>
+            <StatTile label="Faturamento médio / margem">
               <p className="text-slate-900 font-medium">
                 {diagnostic.company.avgRevenue || "—"} · {diagnostic.company.margin || "—"}
               </p>
-            </div>
+            </StatTile>
           </div>
 
           {aiNarrative && (
-            <div className="mb-6 rounded-lg bg-blue-50 border border-blue-100 p-4">
-              <p className="text-xs font-semibold text-blue-700 uppercase mb-1">
+            <div className="mb-6 rounded-xl bg-blue-50/70 border border-blue-100 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">
+                <SparklesIcon className="w-3.5 h-3.5" />
                 Análise consultiva · Gerado por IA
               </p>
-              <p className="text-sm text-slate-800">{aiNarrative.executiveSummary}</p>
+              <p className="text-sm text-slate-800 leading-relaxed">{aiNarrative.executiveSummary}</p>
             </div>
           )}
 
@@ -158,10 +147,10 @@ export default async function RelatorioPage({
               </ul>
             </div>
           </div>
-        </section>
+        </Card>
 
         {/* 2. Mapa de Maturidade por Área */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <Card>
           <h2 className="text-xl font-bold text-slate-900 mb-4">
             Mapa de Maturidade por Área
           </h2>
@@ -177,24 +166,24 @@ export default async function RelatorioPage({
               </thead>
               <tbody>
                 {report.areaScores.map((a) => (
-                  <tr key={a.area.key} className="border-b border-slate-100">
+                  <tr key={a.area.key} className="border-b border-slate-100 last:border-0">
                     <td className="py-2.5 pr-4 font-medium text-slate-800">{a.area.name}</td>
                     <td className="py-2.5 pr-4 text-slate-700">{a.average.toFixed(1)}</td>
                     <td className="py-2.5 pr-4">
                       <ScoreBar score={a.average} />
                     </td>
                     <td className="py-2.5 pr-4">
-                      <Badge text={a.status} styles={STATUS_STYLES} />
+                      <Badge text={a.status} tone={statusTone(a.status)} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
 
         {/* 3. Diagnóstico Analítico */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <Card>
           <h2 className="text-xl font-bold text-slate-900 mb-4">
             Diagnóstico Analítico
           </h2>
@@ -207,7 +196,7 @@ export default async function RelatorioPage({
                   <div key={a.area.key} className="border-b border-slate-100 pb-4 last:border-0">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="font-semibold text-slate-900">{a.area.name}</h3>
-                      <Badge text={a.status} styles={STATUS_STYLES} />
+                      <Badge text={a.status} tone={statusTone(a.status)} />
                     </div>
                     <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
                       {a.weakestQuestions.map((q) => (
@@ -233,10 +222,10 @@ export default async function RelatorioPage({
                 );
               })}
           </div>
-        </section>
+        </Card>
 
         {/* 4. Matriz de Priorização */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <Card>
           <h2 className="text-xl font-bold text-slate-900 mb-4">
             Matriz de Priorização
           </h2>
@@ -251,21 +240,21 @@ export default async function RelatorioPage({
               </thead>
               <tbody>
                 {report.priorityMatrix.map((p) => (
-                  <tr key={p.areaKey} className="border-b border-slate-100">
+                  <tr key={p.areaKey} className="border-b border-slate-100 last:border-0">
                     <td className="py-2.5 pr-4 font-medium text-slate-800">{p.areaName}</td>
                     <td className="py-2.5 pr-4 text-slate-700">{p.average.toFixed(1)}</td>
                     <td className="py-2.5 pr-4">
-                      <Badge text={p.classification} styles={CLASS_STYLES} />
+                      <Badge text={p.classification} tone={classificationTone(p.classification)} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
 
         {/* 5. Plano de Ação Recomendado */}
-        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <Card>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="text-xl font-bold text-slate-900">
               Plano de Ação Recomendado
@@ -293,7 +282,7 @@ export default async function RelatorioPage({
             <ActionBlock title="31 a 90 dias" items={report.actionPlan.days90} />
             <ActionBlock title="3 a 12 meses" items={report.actionPlan.months12} />
           </div>
-        </section>
+        </Card>
       </div>
     </main>
   );
@@ -319,13 +308,13 @@ function ActionBlock({
         {items.map((item, i) => (
           <div
             key={i}
-            className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-3"
+            className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-3 hover:border-slate-300 transition-colors"
           >
             <div>
               <p className="text-xs text-slate-500">{item.areaName}</p>
               <p className="text-sm font-medium text-slate-900">{item.action}</p>
             </div>
-            <Badge text={item.priority} styles={PRIORITY_STYLES} />
+            <Badge text={item.priority} tone={priorityTone(item.priority)} />
           </div>
         ))}
       </div>

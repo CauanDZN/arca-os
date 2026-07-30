@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { Card } from "@/app/components/Card";
+import { Badge } from "@/app/components/Badge";
+import { PlugIcon } from "@/app/components/icons";
 
 type Integration = {
   name: string;
@@ -25,17 +28,20 @@ export default function IntegracoesPage() {
           ← Empresas
         </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-          <p className="text-sm font-semibold text-blue-700 uppercase mb-1">ArcaOS</p>
+        <Card>
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+            <PlugIcon className="w-4 h-4" />
+            ArcaOS
+          </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Integrações</h1>
           <p className="text-slate-600">
             A visão de longo prazo é a Arca ser uma camada inteligente acima dos sistemas do
             cliente. Esta tela mostra as integrações previstas — nenhuma está conectada nesta
             versão do MVP.
           </p>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b border-slate-200 bg-slate-50">
@@ -47,16 +53,17 @@ export default function IntegracoesPage() {
             </thead>
             <tbody>
               {INTEGRATIONS.map((integration) => (
-                <tr key={integration.name} className="border-b border-slate-100 last:border-0">
+                <tr
+                  key={integration.name}
+                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors"
+                >
                   <td className="py-3 px-4">
                     <p className="font-medium text-slate-800">{integration.name}</p>
                     <p className="text-xs text-slate-500">{integration.description}</p>
                   </td>
                   <td className="py-3 px-4 text-slate-600">{integration.category}</td>
                   <td className="py-3 px-4">
-                    <span className="inline-block rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-0.5 text-xs font-semibold">
-                      Não conectado
-                    </span>
+                    <Badge text="Não conectado" tone="neutral" />
                   </td>
                   <td className="py-3 px-4 text-right">
                     <button

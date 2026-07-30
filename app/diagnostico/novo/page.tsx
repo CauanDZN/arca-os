@@ -6,9 +6,9 @@ export default function NovoDiagnosticoPage() {
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <form
         action={createDiagnostic}
-        className="mx-auto max-w-3xl bg-white rounded-xl shadow-sm border border-slate-200 p-8"
+        className="mx-auto max-w-3xl bg-white rounded-2xl shadow-sm border border-slate-200/80 p-8"
       >
-        <p className="text-sm font-semibold text-blue-700 uppercase mb-1">
+        <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
           Etapa 1 de 3
         </p>
         <h1 className="text-2xl font-bold text-slate-900 mb-1">
@@ -63,12 +63,11 @@ export default function NovoDiagnosticoPage() {
           </legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {OBJECTIVES.map((obj) => (
-              <label
-                key={obj}
-                className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50 cursor-pointer"
-              >
-                <input type="checkbox" name="objectives" value={obj} className="accent-blue-700" />
-                {obj}
+              <label key={obj} className="cursor-pointer">
+                <input type="checkbox" name="objectives" value={obj} className="peer sr-only" />
+                <div className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2 transition-colors peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-800 hover:bg-slate-50 peer-checked:hover:bg-blue-50">
+                  {obj}
+                </div>
               </label>
             ))}
           </div>
@@ -76,7 +75,7 @@ export default function NovoDiagnosticoPage() {
 
         <button
           type="submit"
-          className="mt-8 w-full rounded-lg bg-blue-700 text-white font-semibold py-3 hover:bg-blue-800 transition-colors"
+          className="mt-8 w-full rounded-lg bg-blue-700 text-white font-semibold py-3 hover:bg-blue-800 transition-colors shadow-sm shadow-blue-700/20"
         >
           Iniciar Questionário
         </button>
@@ -106,7 +105,7 @@ function Field({
         name={name}
         required={required}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
       />
     </label>
   );
@@ -121,7 +120,7 @@ function TextAreaField({ label, name }: { label: string; name: string }) {
       <textarea
         name={name}
         rows={3}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
       />
     </label>
   );

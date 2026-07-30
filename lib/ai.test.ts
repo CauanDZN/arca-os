@@ -9,7 +9,7 @@ vi.mock("@google/genai", () => ({
   }),
 }));
 
-import { generateAiNarrative } from "@/lib/ai";
+import { generateAiNarrative, generateMaturityEvolution } from "@/lib/ai";
 
 const company = { name: "Empresa Teste", segment: "Varejo", painPoints: "", objectives: [] };
 const report = buildReport([]);
@@ -88,5 +88,52 @@ describe("generateAiNarrative", () => {
     });
     const result = await generateAiNarrative(company, report);
     expect(result).toEqual(payload);
+  });
+});
+
+describe("generateMaturityEvolution", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  const previous = { date: new Date("2026-01-01"), report: buildReport([]) };
+  const current = { date: new Date("2026-06-01"), report };
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await generateMaturityEvolution("Empresa Teste", previous, current);
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await generateMaturityEvolution("Empresa Teste", previous, current);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the response text is empty", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: "" });
+    const result = await generateMaturityEvolution("Empresa Teste", previous, current);
+    expect(result).toBeNull();
+  });
+
+  it("returns the trimmed paragraph on success", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: "  A empresa evoluiu bem.  " });
+    const result = await generateMaturityEvolution("Empresa Teste", previous, current);
+    expect(result).toBe("A empresa evoluiu bem.");
   });
 });
