@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Company {
+  id                String       @id @default(cuid())
+  name              String
+  segment           String
+  marketAge         String
+  employees         String
+  avgRevenue        String
+  margin            String
+  activeClients     String
+  productsServices  String
+  cities            String
+  painPoints        String
+  objectives        String // JSON-encoded array of selected objectives
+  createdAt         DateTime     @default(now())
+  diagnostics       Diagnostic[]
+  documents         Document[]
+}
+
+model Diagnostic {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status      String   @default("em_andamento") // em_andamento | concluido | em_execucao
+  aiNarrative String? // JSON: { executiveSummary, areaInsights: [{ areaKey, causaRaiz, recomendacao }] }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  answers     Answer[]
+  tasks       Task[]
+}
+
+model Answer {
+  id           String     @id @default(cuid())
+  diagnosticId String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  areaKey      String
+  questionId   String
+  score        Int
+  evidence     String     @default("")
+  responsible  String     @default("")
+  impact       String     @default("Médio") // Baixo | Médio | Alto
+  urgency      String     @default("Média") // Baixa | Média | Alta
+  risk         String     @default("Operacional") // Operacional | Financeiro | Comercial | Jurídico | Fiscal | Pessoas | Tecnologia
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([diagnosticId, areaKey, questionId])
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category     String // area key or "geral"
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  diagnosticId String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  areaKey      String
+  areaName     String
+  title        String
+  priority     String // Alta | Média | Baixa
+  timeframe    String // 30 dias | 31 a 90 dias | 3 a 12 meses
+  status       String     @default("todo") // todo | doing | done
+  position     Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
