@@ -46,3 +46,11 @@ export function classificationTone(classification: string): BadgeTone {
       return "neutral";
   }
 }
+
+export function maturityTone(level: number): BadgeTone {
+  if (level <= 1) return "critical";
+  if (level === 2) return "serious";
+  if (level === 3) return "warning";
+  if (level === 4) return "managed";
+  return "good";
+}

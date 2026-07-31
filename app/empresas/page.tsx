@@ -46,7 +46,8 @@ export default async function EmpresasPage() {
               </Link>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-slate-500 border-b border-slate-200 bg-slate-50">
                   <th className="py-3 px-4">Empresa</th>
@@ -72,6 +73,7 @@ export default async function EmpresasPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

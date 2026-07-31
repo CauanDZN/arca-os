@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { buildReport, type AreaScore } from "@/lib/scoring";
 import type { AiNarrative, VerticalInsight } from "@/lib/ai";
 import { findEvidenceGaps } from "@/lib/audit";
-import { statusTone, classificationTone, priorityTone } from "@/lib/badge-tones";
+import { statusTone, classificationTone, priorityTone, maturityTone } from "@/lib/badge-tones";
 import { getAreaByKey, VERTICAL_AGENT_AREAS } from "@/lib/areas";
+import { verticalAverages } from "@/lib/verticals";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { PrintButton } from "./PrintButton";
@@ -65,6 +66,10 @@ export default async function RelatorioPage({
     return { area, areaScore, insight: verticalInsightByArea.get(key) ?? null };
   });
 
+  const verticalScores = verticalAverages(
+    report.areaScores.map((a) => ({ areaKey: a.area.key, average: a.average }))
+  );
+
   const sections: ReportSection[] = [
     {
       id: "sumario",
@@ -82,7 +87,13 @@ export default async function RelatorioPage({
                 {report.overallAverage.toFixed(1)}
                 <span className="text-base text-slate-400">/5</span>
               </p>
-              <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
+              <div className="space-y-1.5">
+                <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
+                <Badge
+                  text={`Nível ${report.maturityLevel} · ${report.maturityLabel}`}
+                  tone={maturityTone(report.maturityLevel)}
+                />
+              </div>
             </StatTile>
             <StatTile label="Segmento">
               <p className="text-slate-900 font-medium">{diagnostic.company.segment || "—"}</p>
@@ -187,6 +198,22 @@ export default async function RelatorioPage({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <h3 className="font-semibold text-slate-900 mt-8 mb-1">As 8 Verticais da Arca</h3>
+          <p className="text-xs text-slate-500 mb-4">
+            As 12 áreas do questionário consolidadas nas 8 verticais do pitch da Arca.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+            {verticalScores.map((v) => (
+              <div key={v.key}>
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <span className="text-sm font-medium text-slate-800">{v.name}</span>
+                  <span className="text-sm font-semibold text-slate-900">{v.average.toFixed(1)}</span>
+                </div>
+                <ScoreBar score={v.average} />
+              </div>
+            ))}
           </div>
         </Card>
       ),

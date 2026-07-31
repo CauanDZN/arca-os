@@ -32,6 +32,8 @@ export type ActionItem = {
 export type Report = {
   overallAverage: number;
   overallStatus: string;
+  maturityLevel: number;
+  maturityLabel: string;
   areaScores: AreaScore[];
   strengths: AreaScore[];
   risks: AreaScore[];
@@ -51,6 +53,50 @@ export function statusForScore(avg: number): string {
   if (avg < 3.5) return "Em estruturação";
   if (avg < 4.5) return "Gerenciado";
   return "Otimizado";
+}
+
+export type MaturityLevel = {
+  level: number;
+  label: string;
+  description: string;
+};
+
+// Motor de Maturidade em 5 níveis (Empresa informal → Escalável), a linguagem
+// do pitch do Cícero. A nota 0–5 de cada diagnóstico é traduzida num nível.
+export const MATURITY_LEVELS: MaturityLevel[] = [
+  {
+    level: 1,
+    label: "Empresa Informal",
+    description: "Gestão reativa — roda no improviso e na figura do dono.",
+  },
+  {
+    level: 2,
+    label: "Empresa Operacional",
+    description: "Já opera no dia a dia, mas com processos informais e dependentes de pessoas-chave.",
+  },
+  {
+    level: 3,
+    label: "Empresa Estruturada",
+    description: "Rotinas, papéis e indicadores definidos — a execução ainda é manual.",
+  },
+  {
+    level: 4,
+    label: "Empresa Gerenciada",
+    description: "Decisões orientadas a dados, com metas, planos de ação e comitê de gestão.",
+  },
+  {
+    level: 5,
+    label: "Empresa Escalável",
+    description: "Operação padronizada e replicável — pronta para crescer sem o dono.",
+  },
+];
+
+export function maturityLevelForScore(avg: number): MaturityLevel {
+  if (avg < 1) return MATURITY_LEVELS[0];
+  if (avg < 2) return MATURITY_LEVELS[1];
+  if (avg < 3) return MATURITY_LEVELS[2];
+  if (avg < 4) return MATURITY_LEVELS[3];
+  return MATURITY_LEVELS[4];
 }
 
 function classify(areaKey: string, avg: number): PriorityItem["classification"] {
@@ -146,9 +192,13 @@ export function buildReport(answers: AnswerInput[]): Report {
     else actionPlan.months12.push(...items);
   }
 
+  const maturity = maturityLevelForScore(overallAverage);
+
   return {
     overallAverage,
     overallStatus,
+    maturityLevel: maturity.level,
+    maturityLabel: maturity.label,
     areaScores,
     strengths,
     risks,

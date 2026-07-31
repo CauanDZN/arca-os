@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { buildDashboardData } from "@/lib/dashboard";
-import { statusTone } from "@/lib/badge-tones";
+import { statusTone, maturityTone } from "@/lib/badge-tones";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { BarChart } from "@/app/components/BarChart";
@@ -79,8 +79,14 @@ export default async function DashboardPage() {
                     Nota média {data.avgScore === null ? "" : "de 5"}
                   </p>
                   {data.avgScore !== null && (
-                    <div className="mt-1.5">
+                    <div className="mt-1.5 space-y-1.5">
                       <Badge text={data.avgStatus} tone={statusTone(data.avgStatus)} />
+                      {data.avgLevel !== null && (
+                        <Badge
+                          text={`Nível ${data.avgLevel} · ${data.avgLevelLabel}`}
+                          tone={maturityTone(data.avgLevel)}
+                        />
+                      )}
                     </div>
                   )}
                 </Card>

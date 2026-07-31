@@ -128,6 +128,13 @@ export default async function EmpresaDetailPage({
               Indicadores
             </Link>
             <Link
+              href={`/portal/${id}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <SparklesIcon className="w-4 h-4" />
+              Portal do Cliente
+            </Link>
+            <Link
               href="/diagnostico/novo"
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
@@ -235,7 +242,8 @@ export default async function EmpresaDetailPage({
                           : "Em andamento"}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Nota geral: {report.overallAverage.toFixed(1)}/5
+                      Nota geral: {report.overallAverage.toFixed(1)}/5 · Nível {report.maturityLevel} ·{" "}
+                      {report.maturityLabel}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

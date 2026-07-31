@@ -32,7 +32,7 @@ describe("aggregateDashboard", () => {
 
     expect(data.companyCount).toBe(3);
     expect(data.avgScore).toBeCloseTo(3.7, 1);
-    expect(data.avgStatus).toBe("Em estruturação");
+    expect(data.avgStatus).toBe("Gerenciado");
     expect(data.ranking.map((r) => r.name)).toEqual(["Gama", "Alfa", "Beta"]);
     expect(data.ranking[0].score).toBe(5);
     expect(data.ranking[2].score).toBe(2);

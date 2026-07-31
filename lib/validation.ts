@@ -56,6 +56,21 @@ export const meetingNotesSchema = z.object({
   rawNotes: z.string().trim().min(1, "Cole ou digite as anotações da reunião.").max(8000),
 });
 
+export const decisionSchema = z.object({
+  title: z.string().trim().min(1, "Descreva a decisão.").max(160),
+  summary: z.string().trim().max(500).default(""),
+  decidedAt: z
+    .string()
+    .trim()
+    .refine((v) => !Number.isNaN(Date.parse(v)), "Data da decisão inválida")
+    .transform((v) => new Date(v)),
+  decidedBy: z.string().trim().max(120).default(""),
+});
+
+export const messageSchema = z.object({
+  body: z.string().trim().min(1, "Escreva a mensagem.").max(2000),
+});
+
 export const sprintSchema = z
   .object({
     name: z.string().trim().min(1, "Dê um nome ao sprint.").max(120),

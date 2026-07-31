@@ -36,4 +36,14 @@ button:not(:disabled),
   cursor: pointer;
 }
 
+/* Esconde a barra de rolagem do mini header de navegação no mobile, mantendo
+   o scroll horizontal por toque. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 

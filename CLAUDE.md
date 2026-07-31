@@ -20,6 +20,30 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
   layouts **não** compartilham JSX — uma mudança visual no relatório não se propaga pro PDF.
 - **Upload em `uploads/` no disco local**, não bucket externo. Não funciona em hospedagem
   serverless sem trocar para S3/Vercel Blob.
+- **8 verticais da Arca (`lib/verticals.ts`)** — as 12 áreas do questionário são mapeadas nas 8
+  verticais do pitch: Estratégia e Governança (`estrategia`); Financeiro e Controladoria
+  (`financeiro`); Comercial, Marketing e Sucesso do Cliente (`comercial`, `marketing`, `atendimento`);
+  Operações e Suprimentos (`operacoes`, `compras`); Pessoas e Cultura (`pessoas`); Tecnologia e Dados
+  (`tecnologia`); Fiscal, Jurídico e Compliance (`fiscal`, `juridico`); Gestão da Rotina e Indicadores
+  (`indicadores`). O teste unitário garante que toda área cai em exatamente uma vertical. Se uma área
+  for renomeada/removida, atualize `verticals.ts` junto — o build não pega.
+- **Motor de maturidade Nível 1–5 (`lib/scoring.ts`)** — `maturityLevelForScore(avg)` usa limiares
+  < 1 → Nível 1, < 2 → Nível 2, < 3 → Nível 3, < 4 → Nível 4, resto → Nível 5 (ou seja, nota 3.0 já
+  é Nível 4). O nível é exposto no `Report` como `maturityLevel`/`maturityLabel` e estilizado via
+  `maturityTone` em `lib/badge-tones.ts`.
+- **Relatório mensal do Comitê de Gestão (`lib/monthly-report.ts`)** — `buildMonthlyReport` é uma
+  função pura (mesma filosofia do `buildReport`): recebe o snapshot e devolve `null` se a empresa
+  não tiver respostas. Persistência é upsert por `companyId + period` no model `MonthlyReport`. O
+  período vem de `currentPeriod()` em `America/Sao_Paulo` usando `Intl.DateTimeFormat` +
+  `formatToParts` (não `format()` direto — em pt-BR ele retorna `MM-AAAA`, ex. `07-2026`).
+- **Cron do relatório mensal (`app/api/cron/mensal/route.ts` + `cron.json`)** — rota GET protegida
+  por `Authorization: Bearer $CRON_SECRET`; itera as empresas com respostas e faz upsert do
+  scorecard do mês. Agenda: dia 1 de cada mês, 9h UTC (`0 9 1 * *`). Sem `CRON_SECRET` a rota
+  retorna 401. Rodar `generateMonthlyReport` manualmente no portal tem o mesmo efeito por empresa.
+- **Portal do cliente (`app/portal/`, `app/actions-portal.ts`)** — `Decision`, `Message` e
+  `MonthlyReport` são models novos ligados à `Company`. Toda action recebe `companyId` e chama
+  `assertCompanyAccess` antes de mutar; decisões também podem vir das atas
+  (`MeetingMinutes.decisions`, string com quebras de linha).
 - **Narrativa de IA é gerada sob demanda**, não na conclusão. Concluir o último bloco do
   questionário (`saveAreaAnswers`) só marca o diagnóstico como `concluido` e dispara o webhook de
   saída — salvar nunca bloqueia em Gemini. A análise consultiva (`Diagnostic.aiNarrative`, JSON
@@ -30,23 +54,35 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
 
 ## Suíte de testes — como funciona e armadilhas
 
-`npm test` (`vitest run`). 9 arquivos, 91 testes, todos devem passar antes de considerar qualquer
-mudança pronta.
+**Dois modos de rodar:**
 
-**Provisionamento do banco** (`vitest.config.ts`, roda uma vez ao iniciar o Vitest, fora dos test
-workers):
-1. Cria um diretório temp (`os.tmpdir()`), um arquivo `test.db` novo.
-2. Lê `prisma/migrations/*/migration.sql` em ordem alfabética (= cronológica, prefixo timestamp) e
-   executa cada um via `better-sqlite3` direto — **não** roda `prisma migrate deploy` (mais rápido,
-   sem spawnar processo).
-3. Injeta `DATABASE_URL=file:<temp>` via `test.env` — isso é lido por `lib/prisma.ts` quando os
-   testes importam `@/lib/prisma` (estaticamente, no topo do arquivo — funciona porque `test.env`
-   é aplicado pelo worker *antes* do módulo do teste ser carregado).
-4. **Se adicionar uma migration nova, nada precisa mudar** — o loop já pega qualquer pasta nova em
+```bash
+npx vitest run --config vitest.unit.config.ts lib/   # unitários puros — SEM banco (15 arquivos, 127 testes)
+npm test                                             # suíte completa (unitário + integração) — precisa de banco
+```
+
+Os testes `lib/*.test.ts` são todos funções puras (scoring, areas, verticals, monthly-report,
+dashboard, session, ai com Gemini mockado, pdf) e rodam **sem banco** pelo `vitest.unit.config.ts`.
+O `npm test` usa o `vitest.config.ts`, que exige um Postgres de teste: **`npm test` falha sem
+`TEST_DATABASE_URL` em `.env.test.local`** (gitignored, `test/setup-db.ts` dropa e recria o schema
+`public`). Na dúvida, rode a primeira linha — é a que valida as regras de negócio puras.
+
+**Provisionamento do banco** (`vitest.config.ts` + `test/setup-db.ts`, roda uma vez ao iniciar o
+Vitest, fora dos test workers):
+1. Lê `TEST_DATABASE_URL` de `.env.test.local` (dotenv). **Sem ela, falha na hora** — não existe
+   fallback para SQLite.
+2. `DROP SCHEMA public CASCADE; CREATE SCHEMA public` no Postgres de teste (por isso ela **não pode
+   ser o banco de dev/produção**).
+3. Lê `prisma/migrations/*/migration.sql` em ordem alfabética (= cronológica, prefixo timestamp) e
+   executa cada uma via `pg` direto — **não** roda `prisma migrate deploy`.
+4. Injeta `DATABASE_URL` (o valor de `TEST_DATABASE_URL`) via `test.env` — isso é lido por
+   `lib/prisma.ts` quando os testes importam `@/lib/prisma` (estaticamente, no topo do arquivo —
+   funciona porque `test.env` é aplicado pelo worker *antes* do módulo do teste ser carregado).
+5. **Se adicionar uma migration nova, nada precisa mudar** — o loop já pega qualquer pasta nova em
    `prisma/migrations/`.
-5. **`fileParallelism: false` é obrigatório** — todos os arquivos de teste compartilham o mesmo
-   arquivo `.db`; rodar em paralelo causa corrida entre arquivos. Testes dentro de um mesmo arquivo
-   já usam nomes de empresa únicos por teste para não colidir mesmo em série.
+6. **`fileParallelism: false` é obrigatório** — todos os arquivos de teste compartilham o mesmo
+   banco; rodar em paralelo causa corrida entre arquivos. Testes dentro de um mesmo arquivo já usam
+   nomes de empresa únicos por teste para não colidir mesmo em série.
 
 **Mockando `@google/genai`** (`lib/ai.test.ts`): `GoogleGenAI` é chamado com `new`, então o mock
 **precisa** ser uma `function` (ou classe) que retorna o objeto fake — uma arrow function em
@@ -90,8 +126,9 @@ arrastar a cada solto.
 ## Comandos úteis
 
 ```bash
-npm test                                # suíte completa (unitário + integração)
-npx vitest run lib/scoring.test.ts      # um arquivo só
+npx vitest run --config vitest.unit.config.ts lib/   # unitários puros, sem banco
+npx vitest run --config vitest.unit.config.ts lib/scoring.test.ts   # um arquivo só
+npm test                                # suíte completa (exige TEST_DATABASE_URL em .env.test.local)
 npx prisma migrate dev --name <nome>    # criar/aplicar migration após editar schema.prisma
 npx prisma generate                     # regenerar o client (roda automático após migrate)
 npx prisma studio                       # inspecionar dev.db visualmente
@@ -150,6 +187,12 @@ sem lib de charts.
 
 - **Deploy em produção**: nunca executar deploy real (Vercel etc.) sem o usuário presente e
   confirmando — toca conta/credenciais de hospedagem dele.
+- **Aplicar a migration `20260731220000_add_portal_and_monthly_report`**: foi criada localmente mas
+  **ainda não foi aplicada** ao Postgres de produção. A build da Vercel roda `prisma migrate deploy`
+  automaticamente, mas a aplicação local depende de `DATABASE_URL` no ambiente do shell (não está
+  no `.env`/`.env.local`), então não rodar `migrate deploy` por conta própria.
+- **`CRON_SECRET` não está definido em lugar nenhum** — precisa ser criado na Vercel para o
+  `/api/cron/mensal` funcionar (rota retorna 401 sem ele).
 - **Upload de arquivos via browser automation**: automação headless não abre o diálogo nativo do
   SO para selecionar arquivo. Para validar upload, use o teste de integração (já cobre isso) ou
   peça para o usuário testar manualmente — não force `input[type=file].value` via JS (o browser
@@ -161,7 +204,11 @@ sem lib de charts.
   variáveis/funções/comentários de código em inglês.
 - Tailwind utilitário direto no JSX — sem CSS modules, sem styled-components.
 - Server Actions (`"use server"`) para toda mutação — sem API routes REST para CRUD, exceto onde é
-  preciso retornar um binário (`/api/documentos/[id]`, `/api/diagnostico/[id]/pdf`).
+  preciso retornar um binário (`/api/documentos/[id]`, `/api/diagnostico/[id]/pdf`) ou onde o
+  Next.js precisa chamar de fora (`/api/cron/mensal`). **Arquivos `"use server"` só exportam
+  funções async** — não exportar constantes (ex.: `ROLE_LABEL`) de lá, o LSP acusa "only async
+  functions are allowed".
 - Ao adicionar uma Server Action nova que muda dados, escreva o teste de integração correspondente
   em `test/integration.test.ts` reaproveitando os helpers `createTestCompany`, `areaAnswersForm`,
-  `completeAllAreas` e `expectRedirect` já existentes no arquivo.
+  `completeAllAreas` e `expectRedirect` já existentes no arquivo. Toda action que recebe
+  `companyId`/`diagnosticId` chama `assertCompanyAccess` (padrão de `app/actions-portal.ts`).

@@ -48,6 +48,49 @@ model Company {
   webhookEvents               WebhookEvent[]
   outboundWebhookUrl          String? // URL do ERP/CRM do cliente — ArcaOS dispara eventos (POST) pra cá
   users                       User[] // usuários vinculados (role "cliente")
+  decisions                   Decision[] // histórico de decisões (Portal do Cliente / Comitê de Gestão)
+  messages                    Message[] // comunicação com a Arca (Portal do Cliente)
+  monthlyReports              MonthlyReport[] // scorecard mensal gerado pelo cron do Comitê de Gestão
+}
+
+model Decision {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title     String
+  summary   String   @default("")
+  decidedAt DateTime
+  decidedBy String   @default("") // quem decidiu (nome livre, do form)
+  createdAt DateTime @default(now())
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  authorName String
+  authorRole String // admin | consultor | cliente
+  body       String
+  createdAt  DateTime @default(now())
+}
+
+model MonthlyReport {
+  id             String   @id @default(cuid())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  period         String // "YYYY-MM" — um scorecard por empresa por mês
+  overallAverage Float
+  maturityLevel  Int
+  maturityLabel  String
+  areaAverages   String // JSON: [{ areaKey, areaName, average, status }]
+  taskStats      String // JSON: { total, done, overdue, noOwner }
+  pendingCount   Int // tarefas abertas (todo/doing)
+  decisionsCount Int
+  kpiCount       Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, period])
 }
 
 model WebhookEvent {

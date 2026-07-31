@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AREAS } from "@/lib/areas";
-import { buildReport, statusForScore } from "@/lib/scoring";
+import { buildReport, maturityLevelForScore, statusForScore } from "@/lib/scoring";
 import type { Session } from "@/lib/session";
 
 export type CompanyForDashboard = {
@@ -39,6 +39,8 @@ export type DashboardData = {
   diagnosticCount: number;
   avgScore: number | null;
   avgStatus: string;
+  avgLevel: number | null;
+  avgLevelLabel: string;
   executionPct: number | null;
   doneTasks: number;
   totalTasks: number;
@@ -74,6 +76,7 @@ export function aggregateDashboard(companies: CompanyForDashboard[]): DashboardD
     withReport.length > 0
       ? Math.round((withReport.reduce((acc, r) => acc + r.report!.overallAverage, 0) / withReport.length) * 10) / 10
       : null;
+  const avgLevel = avgScore === null ? null : maturityLevelForScore(avgScore);
 
   const ranking: CompanyRank[] = withReport
     .map((r) => ({
@@ -104,6 +107,8 @@ export function aggregateDashboard(companies: CompanyForDashboard[]): DashboardD
     diagnosticCount: companies.reduce((acc, c) => acc + c.diagnostics.length, 0),
     avgScore,
     avgStatus: avgScore === null ? "Sem dados" : statusForScore(avgScore),
+    avgLevel: avgLevel?.level ?? null,
+    avgLevelLabel: avgLevel?.label ?? "",
     executionPct: totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : null,
     doneTasks,
     totalTasks,

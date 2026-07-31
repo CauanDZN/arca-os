@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildReport, statusForScore, type AnswerInput } from "@/lib/scoring";
+import {
+  buildReport,
+  maturityLevelForScore,
+  statusForScore,
+  type AnswerInput,
+} from "@/lib/scoring";
 import { AREAS } from "@/lib/areas";
 
 describe("statusForScore", () => {
@@ -14,6 +19,30 @@ describe("statusForScore", () => {
     expect(statusForScore(4.49)).toBe("Gerenciado");
     expect(statusForScore(4.5)).toBe("Otimizado");
     expect(statusForScore(5)).toBe("Otimizado");
+  });
+});
+
+describe("maturityLevelForScore", () => {
+  it("maps 0–5 into the 5 pitch levels (Empresa informal → Escalável)", () => {
+    expect(maturityLevelForScore(0).level).toBe(1);
+    expect(maturityLevelForScore(0.9).label).toBe("Empresa Informal");
+
+    expect(maturityLevelForScore(1).level).toBe(2);
+    expect(maturityLevelForScore(1.9).label).toBe("Empresa Operacional");
+
+    expect(maturityLevelForScore(2).level).toBe(3);
+    expect(maturityLevelForScore(2.9).label).toBe("Empresa Estruturada");
+
+    expect(maturityLevelForScore(3).level).toBe(4);
+    expect(maturityLevelForScore(3.9).label).toBe("Empresa Gerenciada");
+
+    expect(maturityLevelForScore(4).level).toBe(5);
+    expect(maturityLevelForScore(5).label).toBe("Empresa Escalável");
+  });
+
+  it("exposes exactly 5 levels in order", () => {
+    const levels = [1, 2, 3, 4, 5].map((n) => maturityLevelForScore(n - 0.5));
+    expect(levels.map((l) => l.level)).toEqual([1, 2, 3, 4, 5]);
   });
 });
 
@@ -65,6 +94,8 @@ describe("buildReport", () => {
     const report = buildReport(answersWithScore(5));
     expect(report.overallAverage).toBe(5);
     expect(report.overallStatus).toBe("Otimizado");
+    expect(report.maturityLevel).toBe(5);
+    expect(report.maturityLabel).toBe("Empresa Escalável");
     expect(report.areaScores.every((a) => a.status === "Otimizado")).toBe(true);
     expect(report.priorityMatrix.every((p) => p.classification === "Não prioritária")).toBe(true);
     expect(report.actionPlan.days30).toHaveLength(0);

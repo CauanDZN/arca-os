@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
-import { statusTone } from "@/lib/badge-tones";
+import { statusTone, maturityTone } from "@/lib/badge-tones";
 import { auditDataQuality } from "@/lib/data-quality";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
@@ -83,7 +83,8 @@ export default async function RelatoriosPage() {
               </Link>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-slate-500 border-b border-slate-200 bg-slate-50">
                   <th className="py-3 px-4">Empresa</th>
@@ -109,7 +110,13 @@ export default async function RelatoriosPage() {
                       {report.overallAverage.toFixed(1)}/5
                     </td>
                     <td className="py-3 px-4">
-                      <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
+                        <Badge
+                          text={`Nível ${report.maturityLevel} · ${report.maturityLabel}`}
+                          tone={maturityTone(report.maturityLevel)}
+                        />
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-right whitespace-nowrap">
                       <Link
@@ -131,6 +138,7 @@ export default async function RelatoriosPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -1,13 +1,16 @@
 # ArcaOS — Diagnóstico 360, Plano de Ação e Execução para PMEs
 
 MVP da plataforma **ArcaOS**, da Arca Consulting: diagnóstico empresarial digital em 12 áreas de
-gestão, relatório executivo com análise consultiva gerada por IA, plano de ação priorizado e
-execução acompanhada em Kanban — seguindo o ciclo **Diagnosticar → Priorizar → Executar → Medir**
-do plano estratégico da Arca.
+gestão — mapeadas nas **8 verticais** do pitch da Arca —, relatório executivo com análise
+consultiva gerada por IA, **motor de maturidade Nível 1–5** (Empresa informal → Escalável), plano
+de ação priorizado e execução acompanhada em Kanban — seguindo o ciclo
+**Diagnosticar → Priorizar → Executar → Medir** do plano estratégico da Arca.
 
 A jornada do cliente: **Cadastro → Questionário (12 áreas, ~140 perguntas) → Relatório Executivo →
-Aprovação do Plano de Ação → Execução em Kanban**, com Data Room para documentos e um cockpit de
-empresas com histórico comparativo entre diagnósticos.
+Aprovação do Plano de Ação → Execução em Kanban**, com Data Room para documentos, um cockpit de
+empresas com histórico comparativo entre diagnósticos e um **Portal do Cliente** (pendências,
+histórico de decisões e comunicação com a Arca). A gestão é contínua: um **relatório mensal
+automático** (cron) alimenta o **Comitê de Gestão** por empresa.
 
 ## Stack
 
@@ -64,8 +67,9 @@ npm test
 Isso levanta **um banco SQLite temporário próprio** (fora do `dev.db` de desenvolvimento), aplica
 todas as migrations reais nele, e roda:
 
-- **Testes unitários** (`lib/*.test.ts`): motor de pontuação (`scoring.ts`), integridade dos dados
-  do questionário (`areas.ts`), geração de narrativa por IA com fallback gracioso (`ai.ts`, com o
+- **Testes unitários** (`lib/*.test.ts`): motor de pontuação e maturidade (`scoring.ts`), integridade
+  dos dados do questionário (`areas.ts`), mapeamento das 8 verticais (`verticals.ts`), relatório
+  mensal (`monthly-report.ts`), geração de narrativa por IA com fallback gracioso (`ai.ts`, com o
   Gemini mockado — não consome sua chave nem precisa de rede), e geração de PDF (`pdf.tsx`).
 - **Teste de integração** (`test/integration.test.ts`): chama as Server Actions de verdade
   (`createDiagnostic`, `saveAreaAnswers`, `approveActionPlan`, `moveTask`, `uploadDocument`,
@@ -73,8 +77,15 @@ todas as migrations reais nele, e roda:
   questionário com todos os campos extras → conclusão do diagnóstico → aprovação do plano →
   Kanban → upload/exclusão de documento no disco.
 
-35 testes, 5 arquivos, todos passando. Ver `CLAUDE.md` para detalhes de como o banco de teste é
-provisionado e armadilhas conhecidas caso algo quebre.
+> `npm test` precisa de um `TEST_DATABASE_URL` em `.env.test.local` (gitignored) — a suíte de
+> integração re-cria o schema public do Postgres de teste. Para rodar **só os unitários puros**,
+> sem banco nenhum, use o config dedicado:
+>
+> ```bash
+> npx vitest run --config vitest.unit.config.ts lib/
+> ```
+>
+> (15 arquivos, 127 testes, todos passando.)
 
 ## Variáveis de ambiente
 
@@ -82,6 +93,7 @@ Crie um `.env.local` (já está no `.gitignore`, nunca é commitado):
 
 ```bash
 GEMINI_API_KEY="sua-chave-aqui"
+CRON_SECRET="um-segredo-aleatorio-aqui"   # protege /api/cron/mensal
 ```
 
 - **Sem a chave**: o app funciona normalmente. O motor de pontuação e o plano de ação (baseados em
@@ -91,6 +103,9 @@ GEMINI_API_KEY="sua-chave-aqui"
   `test/integration.test.ts`).
 - **Como gerar uma chave gratuita**: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
   (Google AI Studio tem camada gratuita, sem cartão de crédito).
+- `CRON_SECRET` protege a rota `/api/cron/mensal` (relatório mensal automático): a requisição deve
+  mandar `Authorization: Bearer $CRON_SECRET`. Na Vercel, defina a variável e aponte o agendador do
+  Vercel para `/api/cron/mensal` com `cron` de dia 1 de cada mês (ver `cron.json`).
 - `DATABASE_URL` já vem definida em `.env` como `file:./dev.db` — não precisa alterar para uso local.
 
 ## Estrutura de pastas
@@ -106,6 +121,12 @@ app/
   usuarios/page.tsx                       CRUD de usuários no banco (admin only)
   actions-auth.ts                         Server actions: login, logout
   components/NavBar.tsx                   Navegação (varia por papel) + usuário logado/logout
+
+  portal/                                 Portal do Cliente — lista as empresas do usuário (redireciona)
+  portal/[companyId]/                     Portal do Cliente: pendências, decisões, comunicação,
+                                          comitê de gestão (relatórios mensais)
+  actions-portal.ts                       Server actions: addDecision, sendMessage, generateMonthlyReport
+  api/cron/mensal/route.ts                Cron do relatório mensal automático (protegido por CRON_SECRET)
 
   diagnostico/novo/                       Etapa 1 — cadastro da empresa
   diagnostico/[id]/questionario/[areaKey]/  Etapa 2 — wizard de 12 passos, com evidência/
@@ -134,18 +155,26 @@ app/
 
 lib/
   areas.ts (+ .test.ts)                   As 12 áreas e ~140 perguntas do diagnóstico
-  scoring.ts (+ .test.ts)                 Motor de pontuação, maturidade, priorização, plano de ação
+  scoring.ts (+ .test.ts)                 Motor de pontuação, maturidade Nível 1–5, priorização,
+                                           plano de ação, relatório
+  verticals.ts (+ .test.ts)               Mapeamento das 12 áreas nas 8 verticais da Arca
+  monthly-report.ts (+ .test.ts)          Relatório mensal do Comitê de Gestão (função pura)
   dashboard.ts (+ .test.ts)               Agregação de dados pro dashboard (buildDashboardData)
   ai.ts (+ .test.ts)                      Integração com Gemini para o texto consultivo
   pdf.tsx (+ .test.ts)                    Layout do PDF (@react-pdf/renderer)
+  validation.ts                           Schemas zod (empresa, usuário, decisão, mensagem)
+  badge-tones.ts                          Mapeia nível/status pra cor de Badge
   prisma.ts                               Cliente Prisma singleton
   session.ts (+ .test.ts)                 Tipo Session + encode/decode do cookie (puro, Edge-safe)
   auth.ts                                 getSession/setSessionCookie/clearSessionCookie (Node only)
   access.ts                               assertCompanyAccess — trava o papel "cliente" na própria empresa
 
-prisma/schema.prisma                      Modelos: Company, Diagnostic, Answer, Document, Task
+prisma/schema.prisma                      Modelos: Company, User, Diagnostic, Answer, Document, Task,
+                                          Decision, Message, MonthlyReport
 test/integration.test.ts                  Teste de integração ponta a ponta
-vitest.config.ts                          Provisiona o banco SQLite de teste com as migrations reais
+vitest.config.ts                          Provisiona o banco de teste com as migrations reais
+vitest.unit.config.ts                     Roda só os unitários puros (sem banco)
+cron.json                                 Agenda do relatório mensal (dia 1 do mês, 9h)
 ```
 
 ## Modelo de dados
@@ -154,6 +183,10 @@ vitest.config.ts                          Provisiona o banco SQLite de teste com
 Company 1—N Diagnostic 1—N Answer   (uma resposta por pergunta, com evidência/responsável/
                           1—N Task    impacto/urgência/risco; Task é criada ao aprovar o plano)
 Company 1—N Document                (Data Room, categorizado por área)
+Company 1—N Decision                (histórico de decisões — manual no portal + extraído de atas)
+Company 1—N Message                 (comunicação com a Arca no portal do cliente)
+Company 1—N MonthlyReport           (scorecard do comitê de gestão — um por mês, upsert por companyId+period)
+Company 1—N User                    (vínculo do cliente a uma empresa real para o login)
 ```
 
 `Diagnostic.aiNarrative` guarda o JSON gerado pela IA (`{ executiveSummary, areaInsights[] }`),
@@ -165,6 +198,8 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 - [x] Questionário em 12 áreas (~140 perguntas), escala de maturidade 0–5
 - [x] Evidência, responsável, impacto, urgência e risco por pergunta
 - [x] Motor de pontuação: nota por área, nota geral, status (Crítico → Otimizado)
+- [x] **Motor de maturidade Nível 1–5**: Empresa informal → Empresa organizada → Empresa gerenciada → Empresa madura → Empresa escalável (badge no relatório, no dashboard e na lista de relatórios)
+- [x] **8 verticais da Arca**: as 12 áreas mapeadas nas verticais do pitch (Estratégia, Financeiro, Comercial, Operações, Pessoas, Tecnologia, Fiscal/Jurídico, Indicadores), com médias por vertical no relatório
 - [x] Relatório executivo: sumário, mapa de maturidade, diagnóstico analítico, matriz de priorização, plano de ação 30/90/365 dias
 - [x] Texto consultivo gerado por IA (Gemini) no relatório, com fallback para o motor de regras
 - [x] Exportação de PDF real do relatório
@@ -172,6 +207,9 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 - [x] Data Room: upload e download de documentos por empresa, categorizado por área
 - [x] Painel de empresas com histórico comparativo de diagnósticos (evolução da maturidade)
 - [x] Dashboard de análise: nota média, maturidade por área, ranking de empresas e execução da carteira
+- [x] **Portal do Cliente** (`/portal`): pendências, histórico de decisões, comunicação com a Arca e comitê de gestão
+- [x] **Relatório mensal automático**: cron `cron.json` → `/api/cron/mensal` gera/atualiza o scorecard do mês por empresa
+- [x] **App responsivo**: header com mini navegação horizontal em 2 linhas, tabelas com scroll no mobile
 - [x] Central de Agentes de IA (roadmap dos agentes do plano estratégico, com status real)
 - [x] Tela de Integrações externas (ERP, CRM, bancos, WhatsApp etc.) — apenas UI, nada conectado
 - [x] Suíte de testes automatizados (unitário + integração) cobrindo o fluxo completo
@@ -181,6 +219,8 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 | Item | Status |
 |---|---|
 | Diagnóstico, pontuação, relatório, PDF, Kanban, Data Room | **Real** — funcional de ponta a ponta, com teste de integração cobrindo o fluxo |
+| Portal do cliente, decisões, comunicação, comitê de gestão | **Real** — roda sobre Server Actions com controle de acesso (cliente só vê a própria empresa) |
+| Relatório mensal automático (`/api/cron/mensal`) | **Real**, depende de `CRON_SECRET` e do agendador da plataforma de deploy (ver `cron.json`) |
 | Narrativa de IA no relatório | **Real**, condicionada a `GEMINI_API_KEY` configurada |
 | Login e controle de acesso por papel (admin/consultor/cliente) | **Mockado, mas com regras reais** — ver seção abaixo |
 | Tela de Integrações | **Mockup** — lista as integrações previstas, botão "Conectar" desabilitado |
@@ -201,9 +241,9 @@ pode ver o quê) é real, não decorativa.
 - **Sessão**: cookie httpOnly com um JSON em base64 — **não é assinado nem criptografado**. Prova
   as regras de roteamento, não protege dado real contra um usuário que edite o próprio cookie.
 - **Regras**: `cliente` só acessa a empresa vinculada a ele (empresa, diagnósticos, Data Room, atas,
-  indicadores); `admin` e `consultor` veem tudo; só `admin` acessa `/usuarios`. Aplicadas em duas
-  camadas — `proxy.ts` (roteamento, sem acesso ao banco) e `lib/access.ts` (dentro de cada
-  página e Server Action, com o dado real do banco).
+  indicadores e o Portal do Cliente); `admin` e `consultor` veem tudo; só `admin` acessa `/usuarios`.
+  Aplicadas em duas camadas — `proxy.ts` (roteamento, sem acesso ao banco) e `lib/access.ts` (dentro
+  de cada página e Server Action, com o dado real do banco).
 
 ## Não implementado de propósito
 

@@ -147,3 +147,12 @@ export function DashboardIcon({ className = "w-4 h-4" }: IconProps) {
     </svg>
   );
 }
+
+export function PortalIcon({ className = "w-4 h-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-7.5l-3.5 2.5V19.5H6a2 2 0 0 1-2-2v-11Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 13.5h5" />
+    </svg>
+  );
+}
