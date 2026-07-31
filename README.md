@@ -23,9 +23,33 @@ empresas com histórico comparativo entre diagnósticos.
 
 ## Como rodar
 
+Precisa de um Postgres — local via Docker (mais simples) ou um banco gerenciado (Neon,
+Vercel Postgres, Supabase etc.).
+
+### Com Docker (recomendado pra dev local)
+
+```bash
+docker compose up -d db   # sobe só o Postgres — cria arcaos_dev e arcaos_test automaticamente
+npm install
+npm run dev
+```
+
+`DATABASE_URL` de dev aponta pro Postgres do Docker — veja `.env.local` (não commitado):
+
+```bash
+DATABASE_URL="postgresql://arcaos:arcaos@localhost:5432/arcaos_dev"
+```
+
+`docker compose up --build` (sem `-d db`) sobe o stack inteiro, incluindo a imagem de
+produção do app (`Dockerfile`) — útil pra conferir o build containerizado antes de hospedar
+em outro lugar que não a Vercel. Pro dia a dia com hot reload, use `npm run dev` de fora do
+Docker com só o `db` de pé.
+
+### Sem Docker
+
 ```bash
 npm install
-npx prisma migrate dev   # cria/atualiza o banco SQLite local (dev.db)
+npx prisma migrate deploy   # aplica as migrations no Postgres apontado por DATABASE_URL
 npm run dev
 ```
 

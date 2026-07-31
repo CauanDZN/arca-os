@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Standalone output — the Dockerfile copies only .next/standalone (a
+  // pruned node_modules + server.js), not the full node_modules tree.
+  output: "standalone",
 };
 
 export default nextConfig;
