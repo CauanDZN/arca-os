@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaIndex } from "@/lib/areas";
 import { buildReport } from "@/lib/scoring";
 import { generateAiNarrative, generateMaturityEvolution } from "@/lib/ai";
+import { fireOutboundWebhook } from "@/lib/outbound-webhook";
 import { answerFieldsSchema } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
@@ -144,6 +145,19 @@ export async function saveAreaAnswers(
       where: { id: diagnosticId },
       data: { status: "concluido", aiNarrative, evolutionNarrative },
     });
+
+    if (diagnostic) {
+      const report = buildReport(
+        diagnostic.answers.map((a) => ({ areaKey: a.areaKey, questionId: a.questionId, score: a.score }))
+      );
+      await fireOutboundWebhook(diagnostic.companyId, "diagnostic.completed", {
+        diagnosticId,
+        companyName: diagnostic.company.name,
+        overallAverage: report.overallAverage,
+        overallStatus: report.overallStatus,
+      });
+    }
+
     redirect(`/diagnostico/${diagnosticId}/relatorio`);
   }
 }

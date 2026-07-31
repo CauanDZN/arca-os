@@ -3,7 +3,13 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AREAS } from "@/lib/areas";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
-import { generateWebhookToken, revokeWebhookToken, deleteWebhookEvent } from "@/app/actions-webhooks";
+import {
+  generateWebhookToken,
+  revokeWebhookToken,
+  deleteWebhookEvent,
+  setOutboundWebhookUrl,
+  sendTestOutboundEvent,
+} from "@/app/actions-webhooks";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { SubmitButton } from "@/app/components/SubmitButton";
@@ -90,9 +96,13 @@ export default async function DocumentosPage({
             Webhook
           </p>
           <p className="text-slate-600 mb-4">
-            Em vez de uma integração fechada com um ERP ou CRM específico, aponte o webhook do seu
-            sistema pra essa URL — qualquer evento recebido fica registrado aqui, pra consulta ou
-            leitura futura pelos agentes de IA.
+            Em vez de uma integração fechada com um ERP ou CRM específico, conecte nos dois
+            sentidos: receba eventos do seu sistema numa URL própria, ou aponte o ArcaOS pra
+            avisar o seu sistema quando algo mudar por aqui.
+          </p>
+
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+            Receber eventos (entrada)
           </p>
 
           {company.webhookToken ? (
@@ -147,6 +157,45 @@ export default async function DocumentosPage({
               ))}
             </div>
           )}
+
+          <div className="mt-6 pt-4 border-t border-slate-200">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              Enviar eventos (saída)
+            </p>
+            <p className="text-sm text-slate-600 mb-3">
+              Informe a URL do webhook do seu ERP/CRM — o ArcaOS avisa automaticamente quando um
+              diagnóstico é concluído, um plano de ação é aprovado ou uma ação do Kanban muda de
+              status.
+            </p>
+            <form
+              action={setOutboundWebhookUrl.bind(null, id)}
+              className="flex flex-col sm:flex-row gap-2 items-start sm:items-center"
+            >
+              <input
+                type="url"
+                name="url"
+                defaultValue={company.outboundWebhookUrl ?? ""}
+                placeholder="https://seu-sistema.com/webhooks/arcaos"
+                className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-mono"
+              />
+              <SubmitButton
+                pendingText="Salvando..."
+                className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                Salvar
+              </SubmitButton>
+            </form>
+            {company.outboundWebhookUrl && (
+              <form action={sendTestOutboundEvent.bind(null, id)} className="mt-2">
+                <SubmitButton
+                  pendingText="Enviando..."
+                  className="text-xs font-medium text-blue-700 hover:underline disabled:no-underline"
+                >
+                  Enviar evento de teste
+                </SubmitButton>
+              </form>
+            )}
+          </div>
         </Card>
 
         <div className="space-y-4">

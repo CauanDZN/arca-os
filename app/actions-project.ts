@@ -6,6 +6,7 @@ import { taskDetailsSchema, sprintSchema, epicSchema } from "@/lib/validation";
 import { generateSprintReport, type AiNarrative } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
+import { fireOutboundWebhook } from "@/lib/outbound-webhook";
 import { redirect, notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -23,7 +24,7 @@ async function assertDiagnosticAccess(diagnosticId: string): Promise<{ companyId
 }
 
 export async function approveActionPlan(diagnosticId: string) {
-  await assertDiagnosticAccess(diagnosticId);
+  const { companyId } = await assertDiagnosticAccess(diagnosticId);
 
   const diagnostic = await prisma.diagnostic.findUnique({
     where: { id: diagnosticId },
@@ -82,6 +83,11 @@ export async function approveActionPlan(diagnosticId: string) {
       where: { id: diagnosticId },
       data: { status: "em_execucao" },
     });
+
+    await fireOutboundWebhook(companyId, "plan.approved", {
+      diagnosticId,
+      taskCount: allItems.length,
+    });
   }
 
   redirect(`/diagnostico/${diagnosticId}/projeto`);
@@ -94,7 +100,7 @@ export async function moveTask(
   taskId: string,
   direction: "forward" | "backward"
 ) {
-  await assertDiagnosticAccess(diagnosticId);
+  const { companyId } = await assertDiagnosticAccess(diagnosticId);
 
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (task) {
@@ -112,6 +118,12 @@ export async function moveTask(
           data: { taskId, fromStatus: task.status, toStatus: nextStatus },
         }),
       ]);
+      await fireOutboundWebhook(companyId, "task.status_changed", {
+        taskId,
+        title: task.title,
+        fromStatus: task.status,
+        toStatus: nextStatus,
+      });
     }
   }
   redirect(`/diagnostico/${diagnosticId}/projeto`);
@@ -130,7 +142,7 @@ export async function reorderTasks(
   toStatus: string,
   orderedIdsInToStatus: string[]
 ) {
-  await assertDiagnosticAccess(diagnosticId);
+  const { companyId } = await assertDiagnosticAccess(diagnosticId);
   if (!VALID_STATUSES.has(toStatus)) throw new Error("Status inválido");
 
   const movedTask = await prisma.task.findUnique({ where: { id: movedTaskId } });
@@ -152,6 +164,15 @@ export async function reorderTasks(
       ? [prisma.taskEvent.create({ data: { taskId: movedTaskId, fromStatus, toStatus } })]
       : []),
   ]);
+
+  if (fromStatus !== toStatus) {
+    await fireOutboundWebhook(companyId, "task.status_changed", {
+      taskId: movedTaskId,
+      title: movedTask.title,
+      fromStatus,
+      toStatus,
+    });
+  }
 
   revalidatePath(`/diagnostico/${diagnosticId}/projeto`);
 }

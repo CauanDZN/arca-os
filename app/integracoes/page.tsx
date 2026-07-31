@@ -31,7 +31,7 @@ const STATUS_TONE: Record<IntegrationStatus, BadgeTone> = {
 
 const INTEGRATIONS: Integration[] = [
   {
-    name: "Webhook",
+    name: "Webhook — entrada",
     description:
       "URL própria por empresa pra receber eventos de qualquer ERP, CRM ou automação — sem precisar de um conector específico pra cada sistema.",
     category: "Sistemas de gestão",
@@ -39,6 +39,16 @@ const INTEGRATIONS: Integration[] = [
     workaround:
       "Gere a URL na página de Data Room da empresa e aponte o webhook do seu ERP/CRM pra ela. Cada evento recebido fica registrado e disponível pra consulta.",
     ctaLabel: "Gerar URL",
+  },
+  {
+    name: "Webhook — saída",
+    description:
+      "O ArcaOS avisa o seu ERP/CRM quando algo muda por aqui — diagnóstico concluído, plano de ação aprovado, ação do Kanban muda de status.",
+    category: "Sistemas de gestão",
+    status: "disponivel",
+    workaround:
+      "Configure a URL do seu sistema na mesma página de Data Room da empresa, na seção \"Enviar eventos\" — dá pra disparar um evento de teste antes de confiar na integração.",
+    ctaLabel: "Configurar",
   },
   {
     name: "ERP",

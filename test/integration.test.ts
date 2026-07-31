@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs/promises";
 import path from "path";
 import { AREAS } from "@/lib/areas";
@@ -63,7 +63,13 @@ import {
   deleteEpic,
 } from "@/app/actions-project";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
-import { generateWebhookToken, revokeWebhookToken, deleteWebhookEvent } from "@/app/actions-webhooks";
+import {
+  generateWebhookToken,
+  revokeWebhookToken,
+  deleteWebhookEvent,
+  setOutboundWebhookUrl,
+  sendTestOutboundEvent,
+} from "@/app/actions-webhooks";
 import { POST as receiveWebhook } from "@/app/api/webhooks/[companyId]/route";
 import { generateVerticalInsightAction } from "@/app/actions-vertical";
 import { createMeetingNote, deleteMeetingNote } from "@/app/actions-meetings";
@@ -479,6 +485,85 @@ describe("Webhook (generateWebhookToken/revokeWebhookToken + rota de recebimento
     });
     const afterRevokeRes = await receiveWebhook(afterRevokeReq, { params: Promise.resolve({ companyId }) });
     expect(afterRevokeRes.status).toBe(404);
+  });
+});
+
+describe("Webhook de saída (setOutboundWebhookUrl/sendTestOutboundEvent + disparos automáticos)", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("valida a URL, persiste, e sendTestOutboundEvent faz POST nela", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Webhook Saída");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+    const companyId = diagnostic.companyId;
+
+    const invalidFd = new FormData();
+    invalidFd.set("url", "não-é-uma-url");
+    await expect(setOutboundWebhookUrl(companyId, invalidFd)).rejects.toThrow();
+
+    const fd = new FormData();
+    fd.set("url", "https://erp-do-cliente.example.com/webhooks/arcaos");
+    await expectRedirect(setOutboundWebhookUrl(companyId, fd));
+
+    const company = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
+    expect(company.outboundWebhookUrl).toBe("https://erp-do-cliente.example.com/webhooks/arcaos");
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    global.fetch = mockFetch;
+
+    await expectRedirect(sendTestOutboundEvent(companyId));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://erp-do-cliente.example.com/webhooks/arcaos");
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body).toMatchObject({ event: "webhook.test", companyId });
+  });
+
+  it("não chama fetch quando a empresa não configurou URL de saída", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Webhook Saída Vazio");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+
+    const mockFetch = vi.fn();
+    global.fetch = mockFetch;
+
+    await expectRedirect(sendTestOutboundEvent(diagnostic.companyId));
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("dispara plan.approved e task.status_changed automaticamente quando a URL está configurada", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Webhook Saída Eventos");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+    const companyId = diagnostic.companyId;
+
+    const fd = new FormData();
+    fd.set("url", "https://erp-do-cliente.example.com/webhooks/arcaos");
+    await expectRedirect(setOutboundWebhookUrl(companyId, fd));
+
+    // completeAllAreas itself fires a "diagnostic.completed" event on the last
+    // area — set up the mock only after that, to isolate the events this test
+    // actually asserts on (plan.approved, then task.status_changed).
+    await completeAllAreas(diagnosticId, 0);
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    global.fetch = mockFetch;
+
+    await expectRedirect(approveActionPlan(diagnosticId));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    let body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.event).toBe("plan.approved");
+
+    const [task] = await prisma.task.findMany({ where: { diagnosticId } });
+    await expectRedirect(moveTask(diagnosticId, task.id, "forward"));
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    body = JSON.parse((mockFetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(body).toMatchObject({ event: "task.status_changed", companyId });
+    expect(body.data).toMatchObject({ fromStatus: "todo", toStatus: "doing" });
   });
 });
 

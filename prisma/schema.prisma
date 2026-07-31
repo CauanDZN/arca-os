@@ -33,6 +33,7 @@ model Company {
   performanceInsightUpdatedAt DateTime?
   webhookToken                String?         @unique // gerado sob demanda; null = webhook desativado pra essa empresa
   webhookEvents               WebhookEvent[]
+  outboundWebhookUrl          String? // URL do ERP/CRM do cliente — ArcaOS dispara eventos (POST) pra cá
 }
 
 model WebhookEvent {

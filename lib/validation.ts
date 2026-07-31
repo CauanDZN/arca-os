@@ -76,6 +76,22 @@ export const epicSchema = z.object({
 
 const AREA_KEYS = AREAS.map((a) => a.key) as [string, ...string[]];
 
+export const outboundWebhookUrlSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => v === "" || /^https?:\/\//.test(v), "A URL deve começar com http:// ou https://")
+  .refine((v) => {
+    if (v === "") return true;
+    try {
+      new URL(v);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "URL inválida")
+  .transform((v) => (v === "" ? null : v));
+
 export const kpiEntrySchema = z.object({
   areaKey: z.enum(AREA_KEYS),
   indicatorName: z.string().trim().min(1).max(120),
