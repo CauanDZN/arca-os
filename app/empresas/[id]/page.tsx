@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getResumeAreaKey } from "@/lib/areas";
 import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
 import type { MeetingMinutes } from "@/lib/ai";
@@ -236,7 +237,7 @@ export default async function EmpresaDetailPage({
                     <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
                     {diagnostic.status === "em_andamento" ? (
                       <Link
-                        href={`/diagnostico/${diagnostic.id}/questionario/${diagnostic.answers[0]?.areaKey ?? ""}`}
+                        href={`/diagnostico/${diagnostic.id}/questionario/${getResumeAreaKey(diagnostic.answers)}`}
                         className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-3 py-1.5 hover:bg-blue-800 transition-colors"
                       >
                         Continuar

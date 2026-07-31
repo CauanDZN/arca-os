@@ -370,6 +370,21 @@ export function getAreaIndex(key: string): number {
   return AREAS.findIndex((a) => a.key === key);
 }
 
+// Where "Continuar" should take the user: the first area whose questions have
+// not all been answered yet. Falls back to the first area when nothing has
+// been answered (a fresh diagnostic), and to the last area when everything is
+// already complete. Never returns an empty key — that would produce a 404.
+export function getResumeAreaKey(answers: { areaKey: string }[]): string {
+  const answeredCount = new Map<string, number>();
+  for (const answer of answers) {
+    answeredCount.set(answer.areaKey, (answeredCount.get(answer.areaKey) ?? 0) + 1);
+  }
+  const next = AREAS.find(
+    (area) => (answeredCount.get(area.key) ?? 0) < area.questions.length
+  );
+  return next ? next.key : AREAS[AREAS.length - 1].key;
+}
+
 // The 5 areas covered by the Agente de Diagnóstico Vertical (Financeiro /
 // Comercial / Fiscal / RH / Tecnologia) — a deliberate subset, not all 12.
 export const VERTICAL_AGENT_AREAS = ["financeiro", "comercial", "fiscal", "pessoas", "tecnologia"] as const;

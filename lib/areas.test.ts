@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AREAS, OBJECTIVES, getAreaByKey, getAreaIndex } from "@/lib/areas";
+import { AREAS, OBJECTIVES, getAreaByKey, getAreaIndex, getResumeAreaKey } from "@/lib/areas";
 
 describe("AREAS", () => {
   it("has exactly the 12 areas from the pitch", () => {
@@ -67,5 +67,28 @@ describe("OBJECTIVES", () => {
   it("has the 10 objectives from the pitch, all unique", () => {
     expect(OBJECTIVES).toHaveLength(10);
     expect(new Set(OBJECTIVES).size).toBe(10);
+  });
+});
+
+describe("getResumeAreaKey", () => {
+  it("returns the first area for a diagnostic with no answers (the reported 404 bug)", () => {
+    expect(getResumeAreaKey([])).toBe(AREAS[0].key);
+  });
+
+  it("returns the first area not yet fully answered", () => {
+    const firstArea = AREAS[0];
+    const answered = firstArea.questions.map(() => ({ areaKey: firstArea.key }));
+    expect(getResumeAreaKey(answered)).toBe(AREAS[1].key);
+  });
+
+  it("returns the partially answered area when only some of its questions are covered", () => {
+    const firstArea = AREAS[0];
+    const answered = firstArea.questions.slice(0, 3).map(() => ({ areaKey: firstArea.key }));
+    expect(getResumeAreaKey(answered)).toBe(firstArea.key);
+  });
+
+  it("returns the last area when every area is fully answered", () => {
+    const answered = AREAS.flatMap((a) => a.questions.map(() => ({ areaKey: a.key })));
+    expect(getResumeAreaKey(answered)).toBe(AREAS[AREAS.length - 1].key);
   });
 });

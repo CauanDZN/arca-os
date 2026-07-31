@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { AREAS } from "@/lib/areas";
+import { AREAS, getResumeAreaKey } from "@/lib/areas";
 import type { Session } from "@/lib/session";
 
 // @vercel/blob makes a real HTTP call to Vercel's storage API and needs
@@ -155,6 +155,35 @@ describe("createDiagnostic", () => {
     const company = await prisma.company.findUniqueOrThrow({ where: { id: diagnostic.companyId } });
     expect(company.name).toBe("Empresa Integração Criação");
     expect(JSON.parse(company.objectives)).toEqual(["Organizar gestão"]);
+  });
+
+  it("resumes to the first area when the questionnaire was started but nothing was answered", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Continuar Vazio");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({
+      where: { id: diagnosticId },
+      include: { answers: true },
+    });
+    expect(diagnostic.answers).toHaveLength(0);
+
+    // the "Continuar" link on the empresa cockpit must never end in a 404:
+    // without any answers it points at the first area, never an empty key
+    const resumeKey = getResumeAreaKey(diagnostic.answers);
+    expect(resumeKey).toBe(AREAS[0].key);
+    expect(`/diagnostico/${diagnosticId}/questionario/${resumeKey}`).toBe(
+      `/diagnostico/${diagnosticId}/questionario/${AREAS[0].key}`
+    );
+  });
+
+  it("resumes at the first area still missing answers, not the first answered one", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Continuar Parcial");
+    const firstArea = AREAS[0];
+    await expectRedirect(saveAreaAnswers(diagnosticId, firstArea.key, areaAnswersForm(firstArea.key, 3)));
+
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({
+      where: { id: diagnosticId },
+      include: { answers: true },
+    });
+    expect(getResumeAreaKey(diagnostic.answers)).toBe(AREAS[1].key);
   });
 });
 
