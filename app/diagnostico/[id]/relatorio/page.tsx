@@ -9,6 +9,7 @@ import { getAreaByKey, VERTICAL_AGENT_AREAS } from "@/lib/areas";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { PrintButton } from "./PrintButton";
+import { generateNarrativeAction } from "@/app/actions";
 import { approveActionPlan } from "@/app/actions-project";
 import { generateVerticalInsightAction } from "@/app/actions-vertical";
 import { Card } from "@/app/components/Card";
@@ -95,13 +96,38 @@ export default async function RelatorioPage({
             </StatTile>
           </div>
 
-          {aiNarrative && (
+          {aiNarrative ? (
             <div className="mb-6 rounded-xl bg-blue-50/70 border border-blue-100 p-4">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">
                 <SparklesIcon className="w-3.5 h-3.5" />
                 Análise consultiva · Gerado por IA
               </p>
               <p className="text-sm text-slate-800 leading-relaxed">{aiNarrative.executiveSummary}</p>
+            </div>
+          ) : hasGeminiKey ? (
+            <div className="mb-6 rounded-xl border border-blue-200 bg-white p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">
+                <SparklesIcon className="w-3.5 h-3.5" />
+                Análise consultiva
+              </p>
+              <p className="text-sm text-slate-600 mb-3">
+                As respostas já foram salvas. Gere agora a análise consultiva com a IA — leva alguns
+                segundos.
+              </p>
+              <form action={generateNarrativeAction.bind(null, id)}>
+                <SubmitButton
+                  pendingText="Gerando análise..."
+                  className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                >
+                  Gerar análise consultiva com IA →
+                </SubmitButton>
+              </form>
+            </div>
+          ) : (
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">
+                Análise consultiva indisponível — sem chave de IA configurada.
+              </p>
             </div>
           )}
 

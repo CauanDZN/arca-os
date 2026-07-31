@@ -20,9 +20,13 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
   layouts **não** compartilham JSX — uma mudança visual no relatório não se propaga pro PDF.
 - **Upload em `uploads/` no disco local**, não bucket externo. Não funciona em hospedagem
   serverless sem trocar para S3/Vercel Blob.
-- **Narrativa de IA é gerada uma vez**, na conclusão do diagnóstico (`saveAreaAnswers`, branch da
-  última área), e persistida em `Diagnostic.aiNarrative` (JSON string). Nunca lança erro — sem
-  chave ou com falha de rede, `generateAiNarrative` retorna `null` silenciosamente.
+- **Narrativa de IA é gerada sob demanda**, não na conclusão. Concluir o último bloco do
+  questionário (`saveAreaAnswers`) só marca o diagnóstico como `concluido` e dispara o webhook de
+  saída — salvar nunca bloqueia em Gemini. A análise consultiva (`Diagnostic.aiNarrative`, JSON
+  string) e a evolução de maturidade (`Diagnostic.evolutionNarrative`) são geradas por
+  `generateNarrativeAction`, acionado pelo botão "Gerar análise consultiva com IA" no relatório
+  (que redireciona pra `#sumario`). Nunca lança erro — sem chave ou com falha de rede,
+  `generateAiNarrative`/`generateMaturityEvolution` retornam `null` silenciosamente.
 
 ## Suíte de testes — como funciona e armadilhas
 

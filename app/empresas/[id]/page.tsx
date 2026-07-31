@@ -48,8 +48,8 @@ export default async function EmpresaDetailPage({
     return { diagnostic: d, report };
   });
 
-  // Generated once, at diagnostic completion (app/actions.ts) — reading it
-  // here is free; it used to call Gemini live on every visit to this page.
+  // Generated on demand, from the report page (generateNarrativeAction in
+  // app/actions.ts) — reading it here is free; it never calls Gemini live.
   const evolutionNarrative: string | null =
     diagnosticsWithScore.length > 1
       ? diagnosticsWithScore[diagnosticsWithScore.length - 1].diagnostic.evolutionNarrative

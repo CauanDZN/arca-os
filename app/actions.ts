@@ -87,63 +87,19 @@ export async function saveAreaAnswers(
   if (nextArea) {
     redirect(`/diagnostico/${diagnosticId}/questionario/${nextArea.key}`);
   } else {
+    // The last area completes the diagnostic. Saving is instant and never
+    // blocks on AI — the consultive narrative (and the maturity evolution
+    // comparison) are generated on demand from the report page instead, so a
+    // slow/failing Gemini call can't strand the user on a spinning button or
+    // leave them unable to see their own saved answers.
+    await prisma.diagnostic.update({
+      where: { id: diagnosticId },
+      data: { status: "concluido" },
+    });
+
     const diagnostic = await prisma.diagnostic.findUnique({
       where: { id: diagnosticId },
       include: { company: true, answers: true },
-    });
-
-    let aiNarrative: string | null = null;
-    let evolutionNarrative: string | null = null;
-    if (diagnostic) {
-      const report = buildReport(
-        diagnostic.answers.map((a) => ({
-          areaKey: a.areaKey,
-          questionId: a.questionId,
-          score: a.score,
-        }))
-      );
-      const narrative = await generateAiNarrative(
-        {
-          name: diagnostic.company.name,
-          segment: diagnostic.company.segment,
-          painPoints: diagnostic.company.painPoints,
-          objectives: JSON.parse(diagnostic.company.objectives || "[]"),
-        },
-        report
-      );
-      if (narrative) aiNarrative = JSON.stringify(narrative);
-
-      // Generated once here, not on every visit to the empresa cockpit — the
-      // comparison is between two now-immutable diagnostics, so re-running it
-      // later would never produce a different answer anyway.
-      const previousDiagnostic = await prisma.diagnostic.findFirst({
-        where: {
-          companyId: diagnostic.companyId,
-          id: { not: diagnosticId },
-          status: { in: ["concluido", "em_execucao"] },
-        },
-        orderBy: { createdAt: "desc" },
-        include: { answers: true },
-      });
-      if (previousDiagnostic) {
-        const previousReport = buildReport(
-          previousDiagnostic.answers.map((a) => ({
-            areaKey: a.areaKey,
-            questionId: a.questionId,
-            score: a.score,
-          }))
-        );
-        evolutionNarrative = await generateMaturityEvolution(
-          diagnostic.company.name,
-          { date: previousDiagnostic.createdAt, report: previousReport },
-          { date: diagnostic.createdAt, report }
-        );
-      }
-    }
-
-    await prisma.diagnostic.update({
-      where: { id: diagnosticId },
-      data: { status: "concluido", aiNarrative, evolutionNarrative },
     });
 
     if (diagnostic) {
@@ -160,4 +116,74 @@ export async function saveAreaAnswers(
 
     redirect(`/diagnostico/${diagnosticId}/relatorio`);
   }
+}
+
+export async function generateNarrativeAction(diagnosticId: string) {
+  const session = await getSession();
+  const owning = await prisma.diagnostic.findUnique({
+    where: { id: diagnosticId },
+    select: { companyId: true },
+  });
+  if (!owning) notFound();
+  assertCompanyAccess(session, owning.companyId);
+
+  const diagnostic = await prisma.diagnostic.findUnique({
+    where: { id: diagnosticId },
+    include: { company: true, answers: true },
+  });
+  if (!diagnostic) notFound();
+
+  const report = buildReport(
+    diagnostic.answers.map((a) => ({ areaKey: a.areaKey, questionId: a.questionId, score: a.score }))
+  );
+
+  const narrative = await generateAiNarrative(
+    {
+      name: diagnostic.company.name,
+      segment: diagnostic.company.segment,
+      painPoints: diagnostic.company.painPoints,
+      objectives: JSON.parse(diagnostic.company.objectives || "[]"),
+    },
+    report
+  );
+  if (narrative) {
+    await prisma.diagnostic.update({
+      where: { id: diagnosticId },
+      data: { aiNarrative: JSON.stringify(narrative) },
+    });
+  }
+
+  // Generated here, on demand — the comparison is between two now-immutable
+  // diagnostics, so re-running it later would never produce a different answer.
+  const previousDiagnostic = await prisma.diagnostic.findFirst({
+    where: {
+      companyId: diagnostic.companyId,
+      id: { not: diagnosticId },
+      status: { in: ["concluido", "em_execucao"] },
+    },
+    orderBy: { createdAt: "desc" },
+    include: { answers: true },
+  });
+  if (previousDiagnostic) {
+    const previousReport = buildReport(
+      previousDiagnostic.answers.map((a) => ({
+        areaKey: a.areaKey,
+        questionId: a.questionId,
+        score: a.score,
+      }))
+    );
+    const evolutionNarrative = await generateMaturityEvolution(
+      diagnostic.company.name,
+      { date: previousDiagnostic.createdAt, report: previousReport },
+      { date: diagnostic.createdAt, report }
+    );
+    if (evolutionNarrative) {
+      await prisma.diagnostic.update({
+        where: { id: diagnosticId },
+        data: { evolutionNarrative },
+      });
+    }
+  }
+
+  redirect(`/diagnostico/${diagnosticId}/relatorio#sumario`);
 }

@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 
 import { prisma } from "@/lib/prisma";
-import { createDiagnostic, saveAreaAnswers } from "@/app/actions";
+import { createDiagnostic, saveAreaAnswers, generateNarrativeAction } from "@/app/actions";
 import {
   approveActionPlan,
   moveTask,
@@ -223,6 +223,46 @@ describe("saveAreaAnswers", () => {
     const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
     expect(diagnostic.status).toBe("concluido");
     expect(diagnostic.aiNarrative).toBeNull();
+  });
+});
+
+describe("generateNarrativeAction (análise consultiva sob demanda)", () => {
+  it("generates the narrative after completion, falling back gracefully without a key", async () => {
+    expect(process.env.GEMINI_API_KEY).toBeUndefined();
+
+    const diagnosticId = await createTestCompany("Empresa Integração Narrativa");
+    const lastArea = AREAS[AREAS.length - 1];
+
+    // the last area saves instantly and redirects — no Gemini call blocks it
+    const redirectUrl = await expectRedirect(
+      saveAreaAnswers(diagnosticId, lastArea.key, areaAnswersForm(lastArea.key, 2))
+    );
+    expect(redirectUrl).toBe(`/diagnostico/${diagnosticId}/relatorio`);
+
+    // generating the narrative is a separate, explicit action afterwards
+    const narrativeRedirect = await expectRedirect(generateNarrativeAction(diagnosticId));
+    expect(narrativeRedirect).toBe(`/diagnostico/${diagnosticId}/relatorio#sumario`);
+
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+    // no GEMINI_API_KEY in the test env — must fall back gracefully, not crash
+    expect(diagnostic.status).toBe("concluido");
+    expect(diagnostic.aiNarrative).toBeNull();
+  });
+
+  it("blocks a cliente session from generating the narrative of another company's diagnostic", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Narrativa RBAC");
+    await completeAllAreas(diagnosticId, 0);
+
+    mockGetSession.mockResolvedValue({
+      userId: "cliente-test",
+      name: "Cliente Teste",
+      email: "cliente@test.com",
+      role: "cliente",
+      title: "Sponsor",
+      companyId: "empresa-de-outro-cliente",
+    } satisfies Session);
+
+    await expectNotFound(generateNarrativeAction(diagnosticId));
   });
 });
 

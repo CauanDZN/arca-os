@@ -4,10 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
 import { getAreaByKey, VERTICAL_AGENT_AREAS } from "@/lib/areas";
 import { generateVerticalInsight, type VerticalDocument } from "@/lib/ai";
-import { extractDocumentText } from "@/lib/document-extract";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { redirect } from "next/navigation";
+
+// lib/document-extract is loaded lazily (it pulls in pdf-parse/pdfjs-dist, an
+// ESM-only dependency). The relatorio page imports this file for the Server
+// Action, and statically importing it here dragged those heavy deps into the
+// page bundle — that's what made /diagnostico/[id]/relatorio fail at runtime
+// with FUNCTION_INVOCATION_FAILED even though the build passed locally.
 
 export async function generateVerticalInsightAction(diagnosticId: string, areaKey: string) {
   if (!(VERTICAL_AGENT_AREAS as readonly string[]).includes(areaKey)) {
@@ -44,6 +49,7 @@ export async function generateVerticalInsightAction(diagnosticId: string, areaKe
     where: { companyId: diagnostic.companyId, category: areaKey },
   });
   const documents: VerticalDocument[] = [];
+  const { extractDocumentText } = await import("@/lib/document-extract");
   for (const doc of companyDocs) {
     try {
       const response = await fetch(doc.storedUrl);
