@@ -42,9 +42,9 @@ type DecisionRow = {
 export default async function PortalPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ companyId: string }>;
 }) {
-  const { id } = await params;
+  const { companyId: id } = await params;
 
   const session = await getSession();
   if (!session) notFound();
