@@ -1,13 +1,35 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { buildDashboardData } from "@/lib/dashboard";
+import { buildDashboardData, buildObservations } from "@/lib/dashboard";
+import { statusForScore } from "@/lib/scoring";
 import { statusTone, maturityTone } from "@/lib/badge-tones";
+import type { BadgeTone } from "@/lib/badge-tones";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { BarChart } from "@/app/components/BarChart";
 import { ScoreBar } from "@/app/components/ScoreBar";
-import { EmptyBoxIcon, DashboardIcon, BuildingIcon } from "@/app/components/icons";
+import { EmptyBoxIcon, DashboardIcon, BuildingIcon, SparklesIcon, ListChecksIcon } from "@/app/components/icons";
+
+const OBSERVATION_DOT: Record<BadgeTone, string> = {
+  critical: "bg-red-500",
+  serious: "bg-orange-500",
+  warning: "bg-amber-500",
+  managed: "bg-blue-500",
+  good: "bg-green-500",
+  neutral: "bg-slate-400",
+};
+
+// Mesma escala de 5 faixas que statusForScore usa (Crítico → Otimizado) — aqui
+// mapeada direto pelo nível de maturidade (1–5) em vez da nota, só para
+// reaproveitar as cores que o BarChart já reconhece.
+const LEVEL_STATUS_LABEL: Record<number, string> = {
+  1: "Crítico",
+  2: "Frágil",
+  3: "Em estruturação",
+  4: "Gerenciado",
+  5: "Otimizado",
+};
 
 function StatCard({ value, label, hint }: { value: string; label: string; hint?: string }) {
   return (
@@ -19,6 +41,11 @@ function StatCard({ value, label, hint }: { value: string; label: string; hint?:
   );
 }
 
+function formatDate(iso: string | null): string {
+  if (!iso) return "sem prazo";
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session) notFound();
@@ -27,10 +54,12 @@ export default async function DashboardPage() {
   const isClient = session.role === "cliente";
 
   const segmentMax = data.segments.reduce((max, s) => Math.max(max, s.count), 0);
+  const levelMax = Math.max(...data.levelDistribution.map((l) => l.count), 1);
+  const observations = buildObservations(data);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <Card>
           <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             <DashboardIcon className="w-4 h-4" />
@@ -40,7 +69,7 @@ export default async function DashboardPage() {
           <p className="text-slate-600 text-sm">
             {isClient
               ? "Visão consolidada da sua empresa: maturidade, execução e indicadores."
-              : "Visão consolidada da carteira: maturidade média por área, ranking de empresas e execução do plano de ação."}
+              : "Visão consolidada da carteira: maturidade média por área e vertical, ranking de empresas e execução do plano de ação."}
           </p>
         </Card>
 
@@ -104,6 +133,27 @@ export default async function DashboardPage() {
               </div>
             </div>
 
+            {observations.length > 0 && (
+              <Card>
+                <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 mb-1">
+                  <SparklesIcon className="w-5 h-5 text-blue-700" />
+                  Observações
+                </h2>
+                <p className="text-xs text-slate-500 mb-4">
+                  Leituras automáticas geradas a partir dos dados atuais —{" "}
+                  {isClient ? "da sua empresa" : "da carteira"}.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                  {observations.map((o, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${OBSERVATION_DOT[o.tone]}`} />
+                      <p className="text-sm text-slate-700 leading-snug">{o.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 mb-1">
@@ -130,6 +180,29 @@ export default async function DashboardPage() {
                 )}
               </Card>
 
+              <Card>
+                <h2 className="text-xl font-bold text-slate-900 mb-1">Maturidade por vertical</h2>
+                <p className="text-xs text-slate-500 mb-4">
+                  As 12 áreas do diagnóstico agrupadas nas 8 verticais da Arca.
+                </p>
+                {data.verticalAverages.some((v) => v.average > 0) ? (
+                  <BarChart
+                    items={data.verticalAverages.map((v) => ({
+                      label: v.name,
+                      value: v.average,
+                      status: v.average > 0 ? statusForScore(v.average) : undefined,
+                      display: v.average > 0 ? `${v.average.toFixed(1)} · ${statusForScore(v.average)}` : "—",
+                    }))}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    Nenhum diagnóstico respondido ainda para calcular as médias.
+                  </p>
+                )}
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Ranking de maturidade</h2>
                 <p className="text-xs text-slate-500 mb-4">
@@ -168,7 +241,66 @@ export default async function DashboardPage() {
                   </p>
                 )}
               </Card>
+
+              <Card>
+                <h2 className="text-xl font-bold text-slate-900 mb-1">Distribuição por nível de maturidade</h2>
+                <p className="text-xs text-slate-500 mb-4">
+                  Quantas empresas estão em cada nível do motor de maturidade (1–5).
+                </p>
+                <BarChart
+                  items={data.levelDistribution.map((l) => ({
+                    label: `Nível ${l.level} · ${l.label}`,
+                    value: l.count,
+                    max: levelMax,
+                    status: LEVEL_STATUS_LABEL[l.level],
+                    display: String(l.count),
+                  }))}
+                  max={levelMax}
+                />
+              </Card>
             </div>
+
+            {data.atRiskTasks.length > 0 && (
+              <Card>
+                <div className="flex items-center gap-2 mb-1">
+                  <ListChecksIcon className="w-5 h-5 text-blue-700" />
+                  <h2 className="text-xl font-bold text-slate-900">Pendências em risco</h2>
+                  <Badge text={`${data.atRiskTasks.length}`} tone="warning" />
+                </div>
+                <p className="text-xs text-slate-500 mb-4">
+                  Ações do plano de ação atrasadas ou sem responsável definido —{" "}
+                  {isClient ? "da sua empresa" : "de toda a carteira"}.
+                </p>
+                <div className="space-y-2">
+                  {data.atRiskTasks.map((task) => (
+                    <div
+                      key={task.taskId}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-800">{task.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {!isClient && (
+                            <>
+                              <Link href={`/empresas/${task.companyId}`} className="hover:text-blue-700">
+                                {task.companyName}
+                              </Link>
+                              {" · "}
+                            </>
+                          )}
+                          {task.areaName}
+                          {task.reason === "atrasada" && ` · Prazo: ${formatDate(task.dueDate)}`}
+                        </p>
+                      </div>
+                      <Badge
+                        text={task.reason === "atrasada" ? "Atrasada" : "Sem responsável"}
+                        tone={task.reason === "atrasada" ? "critical" : "warning"}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>

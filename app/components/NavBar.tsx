@@ -16,10 +16,10 @@ import {
 } from "@/app/components/icons";
 
 const LINKS = [
-  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, roles: ["admin", "consultor", "cliente"] },
-  { href: "/portal", label: "Portal", icon: PortalIcon, roles: ["cliente"] },
   { href: "/empresas", label: "Empresas", icon: BuildingIcon, roles: ["admin", "consultor"] },
   { href: "/relatorios", label: "Relatórios", icon: DocumentIcon, roles: ["admin", "consultor"] },
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, roles: ["admin", "consultor", "cliente"] },
+  { href: "/portal", label: "Portal", icon: PortalIcon, roles: ["cliente"] },
   { href: "/agentes", label: "Agentes de IA", icon: SparklesIcon, roles: ["admin", "consultor", "cliente"] },
   { href: "/integracoes", label: "Integrações", icon: PlugIcon, roles: ["admin", "consultor", "cliente"] },
 ];
