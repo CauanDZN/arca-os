@@ -1,18 +1,32 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { withAccelerate } from "@prisma/extension-accelerate";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const createPrismaClient = () => {
+  const dbUrl = process.env.DATABASE_URL;
+  
+  // Detect if DATABASE_URL is a cloud/pooled Prisma Postgres service URL (starts with prisma://)
+  const isAccelerate = dbUrl?.startsWith("prisma://") || dbUrl?.startsWith("prisma+postgres://");
 
-// Generic node-postgres adapter — works with any standard Postgres connection
-// string (Neon, Supabase, Vercel Postgres, Railway...), not tied to one
-// provider's proprietary driver. On serverless (Vercel), DATABASE_URL should
-// be the *pooled* connection string your provider gives you (e.g. Neon's
-// "-pooler" host) — a raw unpooled connection exhausts Postgres's connection
-// limit under concurrent function invocations.
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+  if (isAccelerate) {
+    return new PrismaClient({
+      accelerateUrl: dbUrl,
+    } as any).$extends(withAccelerate());
+  } else {
+    // Standard Node.js adapter for direct connections (Docker postgres, SQLite, etc.)
+    const adapter = new PrismaPg({ connectionString: dbUrl });
+    return new PrismaClient({ adapter });
+  }
+};
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+};
+
+export const prisma = (globalForPrisma.prisma ?? createPrismaClient()) as unknown as PrismaClient;
+
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+
