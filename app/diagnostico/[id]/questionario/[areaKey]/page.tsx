@@ -7,6 +7,7 @@ import { IMPACT_OPTIONS, URGENCY_OPTIONS, RISK_OPTIONS } from "@/lib/validation"
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { SubmitButton } from "@/app/components/SubmitButton";
+import { DetailsAccordion } from "./DetailsAccordion";
 
 const SCALE_LABELS = [
   "0 · Inexistente",
@@ -107,83 +108,17 @@ export default async function QuestionarioAreaPage({
                     ))}
                   </div>
 
-                  <details className="mt-3 group">
-                    <summary className="cursor-pointer text-xs font-medium text-blue-700 select-none">
-                      + Evidência, responsável, impacto, urgência e risco
-                    </summary>
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label className="block sm:col-span-2">
-                        <span className="block text-xs font-medium text-slate-600 mb-1">
-                          Evidência (documento, print, indicador, descrição)
-                        </span>
-                        <input
-                          type="text"
-                          name={`${q.id}__evidence`}
-                          defaultValue={existing?.evidence ?? ""}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="block text-xs font-medium text-slate-600 mb-1">
-                          Responsável pela área
-                        </span>
-                        <input
-                          type="text"
-                          name={`${q.id}__responsible`}
-                          defaultValue={existing?.responsible ?? ""}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="block text-xs font-medium text-slate-600 mb-1">
-                          Impacto
-                        </span>
-                        <select
-                          name={`${q.id}__impact`}
-                          defaultValue={existing?.impact ?? "Médio"}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
-                        >
-                          {IMPACT_OPTIONS.map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block">
-                        <span className="block text-xs font-medium text-slate-600 mb-1">
-                          Urgência
-                        </span>
-                        <select
-                          name={`${q.id}__urgency`}
-                          defaultValue={existing?.urgency ?? "Média"}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
-                        >
-                          {URGENCY_OPTIONS.map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block">
-                        <span className="block text-xs font-medium text-slate-600 mb-1">
-                          Risco
-                        </span>
-                        <select
-                          name={`${q.id}__risk`}
-                          defaultValue={existing?.risk ?? "Operacional"}
-                          className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
-                        >
-                          {RISK_OPTIONS.map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  </details>
+                  <DetailsAccordion
+                    questionId={q.id}
+                    defaultEvidence={existing?.evidence ?? ""}
+                    defaultResponsible={existing?.responsible ?? ""}
+                    defaultImpact={existing?.impact ?? "Médio"}
+                    defaultUrgency={existing?.urgency ?? "Média"}
+                    defaultRisk={existing?.risk ?? "Operacional"}
+                    impactOptions={IMPACT_OPTIONS}
+                    urgencyOptions={URGENCY_OPTIONS}
+                    riskOptions={RISK_OPTIONS}
+                  />
                 </fieldset>
               );
             })}
