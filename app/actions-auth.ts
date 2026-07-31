@@ -17,12 +17,13 @@ export async function login(formData: FormData) {
   }
 
   let companyId: string | undefined;
-  if (user.role === "cliente" && user.companyName) {
-    const company = await prisma.company.findFirst({ where: { name: user.companyName } });
-    if (!company) {
+  if (user.role === "cliente") {
+    // Vínculo real definido na tela /usuarios (companyId) — não existe mais a
+    // resolução por nome da migration add_users.
+    if (!user.companyId) {
       redirect("/login?error=empresa");
     }
-    companyId = company.id;
+    companyId = user.companyId;
   }
 
   await setSessionCookie({

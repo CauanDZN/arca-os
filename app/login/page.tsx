@@ -33,7 +33,7 @@ export default async function LoginPage({
           {error && (
             <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {error === "empresa"
-                ? "Empresa vinculada a este usuário não encontrada no banco. Crie a empresa com o nome exato antes."
+                ? "Este usuário ainda não está vinculado a nenhuma empresa. Um administrador precisa vincular uma empresa na tela de Usuários."
                 : "E-mail ou senha inválidos."}
             </p>
           )}

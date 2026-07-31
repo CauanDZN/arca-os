@@ -114,12 +114,16 @@ MVP inicial de propósito. Três peças:
   implementação real usaria sessão assinada (`next-auth`, `iron-session`).
 - **`lib/auth.ts`** — só roda em Node (usa `next/headers`): `getSession`/`setSessionCookie`/
   `clearSessionCookie`.
-- **Modelo `User` no banco** — os usuários vivem em Postgres (migration `add_users`, que também
-  semeia os 5 usuários que antes eram `MOCK_USERS` em `lib/auth-users.ts` — arquivo removido). O
-  login consulta `prisma.user`; a página `/usuarios` (só admin) cria, troca o cargo e exclui
-  usuários via `app/actions-users.ts`. `createUser`/`updateUserRole`/`deleteUser` têm guards:
-  validação via `userSchema`, e-mail único, não se auto-excluir e não excluir o último admin. Senha
-  em texto puro de propósito — não é um cofre de credenciais real.
+- **Modelo `User` no banco** — os usuários vivem em Postgres (migration `add_users`, que semeia
+  os 6 usuários que antes eram `MOCK_USERS` em `lib/auth-users.ts` — arquivo removido; inclui
+  Cícero Pereira, admin). O login consulta `prisma.user`; a página `/usuarios` (só admin) cria,
+  troca o cargo/empresa e exclui usuários via `app/actions-users.ts`. Clientes são vinculados a
+  uma empresa **real** por `User.companyId` (FK, migration `add_user_company_relation`) — a tela
+  usa um `<select>` de empresas e o login usa o `companyId` direto; sem vínculo o login cai em
+  `/login?error=empresa`. `createUser`/`updateUserRole`/`deleteUser` têm guards: validação via
+  `userSchema`, e-mail único, cliente exige empresa (`empresa-obrigatoria`/`empresa-invalida`),
+  não se auto-excluir e não excluir o último admin. Senha em texto puro de propósito — não é um
+  cofre de credenciais real.
 
 **Regras de acesso**: `proxy.ts` bloqueia rotas sem sessão e redireciona `cliente` pra longe de
 `/empresas`, `/relatorios`, `/diagnostico/novo` e de qualquer `/empresas/[id]` que não seja o dele —
@@ -134,6 +138,13 @@ Se `GEMINI_API_KEY`/testes forem afetados: o mock de `next/navigation` em `test/
 agora também precisa exportar `notFound` (não só `redirect`), porque `assertCompanyAccess` chama
 `notFound()` quando bloqueia acesso — se você adicionar um teste novo que usa `next/navigation` sem
 importar desse mock, vai quebrar com "notFound is not a function".
+
+**Dashboard (`/dashboard`)**: agregação em `lib/dashboard.ts` (`buildDashboardData` — query com
+`prisma.company.findMany` incluindo diagnostics/answers/tasks — e `aggregateDashboard`, função pura
+com teste unitário em `lib/dashboard.test.ts`). A página escopa por sessão: `cliente` só vê a
+própria empresa; admin/consultor veem a carteira. A landing `/` fica visível também pra logados
+(não há redirect de `/` no `proxy.ts`). Gráficos são barras CSS puras (`app/components/BarChart.tsx`),
+sem lib de charts.
 
 ## Áreas sensíveis — não fazer sem confirmar com o usuário
 

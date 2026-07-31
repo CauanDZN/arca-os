@@ -12,6 +12,17 @@ async function requireAdmin(): Promise<Session> {
   return session;
 }
 
+// Cliente precisa estar vinculado a uma empresa real — sem isso o login não
+// tem companyId pra escopar o acesso (lib/access.ts). Papéis não-cliente
+// sempre limpam o vínculo.
+async function resolveCompanyId(role: string, companyId: string | null): Promise<string | null> {
+  if (role !== "cliente") return null;
+  if (!companyId) redirect("/usuarios?error=empresa-obrigatoria");
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) redirect("/usuarios?error=empresa-invalida");
+  return companyId;
+}
+
 export async function createUser(formData: FormData) {
   await requireAdmin();
 
@@ -21,7 +32,7 @@ export async function createUser(formData: FormData) {
     password: formData.get("password"),
     role: formData.get("role"),
     title: formData.get("title"),
-    companyName: formData.get("companyName"),
+    companyId: formData.get("companyId"),
   });
   if (!parsed.success) redirect("/usuarios?error=validacao");
 
@@ -29,7 +40,9 @@ export async function createUser(formData: FormData) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) redirect("/usuarios?error=email-existe");
 
-  await prisma.user.create({ data: { ...parsed.data, email } });
+  const companyId = await resolveCompanyId(parsed.data.role, parsed.data.companyId);
+
+  await prisma.user.create({ data: { ...parsed.data, email, companyId } });
   redirect("/usuarios?sucesso=criado");
 }
 
@@ -41,7 +54,10 @@ export async function updateUserRole(userId: string, formData: FormData) {
     redirect("/usuarios?error=validacao");
   }
 
-  await prisma.user.update({ where: { id: userId }, data: { role } });
+  const rawCompanyId = String(formData.get("companyId") ?? "").trim();
+  const companyId = await resolveCompanyId(role, rawCompanyId === "" ? null : rawCompanyId);
+
+  await prisma.user.update({ where: { id: userId }, data: { role, companyId } });
   redirect("/usuarios");
 }
 

@@ -26,6 +26,8 @@ const ROLE_OPTIONS = ["admin", "consultor", "cliente"] as const;
 const ERROR_MESSAGE: Record<string, string> = {
   validacao: "Dados inválidos — confira nome, e-mail, senha (mín. 6) e cargo.",
   "email-existe": "Já existe um usuário com esse e-mail.",
+  "empresa-obrigatoria": "Usuários com papel Cliente precisam de uma empresa vinculada.",
+  "empresa-invalida": "A empresa selecionada não existe mais.",
   autoexclusao: "Você não pode excluir o próprio usuário.",
   "ultimo-admin": "Não é possível excluir o último administrador.",
 };
@@ -44,7 +46,8 @@ export default async function UsuariosPage({
 
   const { error, sucesso } = await searchParams;
 
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { company: true } });
+  const companies = await prisma.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
@@ -131,12 +134,18 @@ export default async function UsuariosPage({
               <span className="block text-xs font-medium text-slate-600 mb-1">
                 Empresa (só para Cliente)
               </span>
-              <input
-                type="text"
-                name="companyName"
-                placeholder="Nome exato da empresa"
-                className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
-              />
+              <select
+                name="companyId"
+                defaultValue=""
+                className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow bg-white"
+              >
+                <option value="">Selecionar empresa...</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="sm:col-span-2">
               <SubmitButton
@@ -168,13 +177,16 @@ export default async function UsuariosPage({
                   </p>
                   <p className="text-xs text-slate-500">{u.title}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
-                  {u.companyName && (
-                    <p className="text-xs text-blue-700 mt-0.5">Empresa: {u.companyName}</p>
+                  {u.company && (
+                    <p className="text-xs text-blue-700 mt-0.5">Empresa: {u.company.name}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                   <Badge text={ROLE_LABEL[u.role]} tone={ROLE_TONE[u.role]} />
-                  <form action={updateUserRole.bind(null, u.id)} className="flex items-center gap-1.5">
+                  <form
+                    action={updateUserRole.bind(null, u.id)}
+                    className="flex items-center gap-1.5 flex-wrap justify-end"
+                  >
                     <select
                       name="role"
                       defaultValue={u.role}
@@ -184,6 +196,19 @@ export default async function UsuariosPage({
                       {ROLE_OPTIONS.map((role) => (
                         <option key={role} value={role}>
                           {ROLE_LABEL[role]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      name="companyId"
+                      defaultValue={u.companyId ?? ""}
+                      aria-label={`Empresa de ${u.name}`}
+                      className="rounded-md border border-slate-300 px-1.5 py-1 text-xs focus:outline-none bg-white max-w-44 truncate"
+                    >
+                      <option value="">Sem empresa</option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
                         </option>
                       ))}
                     </select>

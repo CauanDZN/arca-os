@@ -136,3 +136,14 @@ export function EmptyBoxIcon({ className = "w-10 h-10" }: IconProps) {
     </svg>
   );
 }
+
+export function DashboardIcon({ className = "w-4 h-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 13h6V4H4v9Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14 20h6v-9h-6v9Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20h6v-4H4v4Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14 4v4h6V4h-6Z" />
+    </svg>
+  );
+}

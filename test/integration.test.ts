@@ -856,24 +856,38 @@ describe("login/logout", () => {
     expect(mockSetSessionCookie).not.toHaveBeenCalled();
   });
 
-  it("resolves a cliente user's companyId by name, or errors gracefully if the company doesn't exist yet", async () => {
-    const missingCompanyFd = new FormData();
-    missingCompanyFd.set("email", "roberto@oticavisaoclara.com.br");
-    missingCompanyFd.set("password", "cliente123");
-    const errorRedirect = await expectRedirect(login(missingCompanyFd));
+  it("só deixa cliente logar quando o usuário está vinculado a uma empresa real", async () => {
+    const clientFd = () => {
+      const fd = new FormData();
+      fd.set("email", "roberto@oticavisaoclara.com.br");
+      fd.set("password", "cliente123");
+      return fd;
+    };
+
+    // Sem vínculo (companyId null), o login falha mesmo que a empresa exista.
+    const errorRedirect = await expectRedirect(login(clientFd()));
     expect(errorRedirect).toBe("/login?error=empresa");
     expect(mockSetSessionCookie).not.toHaveBeenCalled();
 
     const diagnosticId = await createTestCompany("Ótica Visão Clara");
     const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+    const companyId = diagnostic.companyId;
 
-    const fd = new FormData();
-    fd.set("email", "roberto@oticavisaoclara.com.br");
-    fd.set("password", "cliente123");
-    const successRedirect = await expectRedirect(login(fd));
-    expect(successRedirect).toBe(`/empresas/${diagnostic.companyId}`);
+    // Criar a empresa por si só não vincula — é preciso atrelar na tela /usuarios.
+    const stillError = await expectRedirect(login(clientFd()));
+    expect(stillError).toBe("/login?error=empresa");
+
+    const roberto = await prisma.user.findUniqueOrThrow({ where: { email: "roberto@oticavisaoclara.com.br" } });
+    const roleFd = new FormData();
+    roleFd.set("role", "cliente");
+    roleFd.set("companyId", companyId);
+    await expectRedirect(updateUserRole(roberto.id, roleFd));
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: roberto.id } })).companyId).toBe(companyId);
+
+    const successRedirect = await expectRedirect(login(clientFd()));
+    expect(successRedirect).toBe(`/empresas/${companyId}`);
     expect(mockSetSessionCookie).toHaveBeenCalledWith(
-      expect.objectContaining({ role: "cliente", companyId: diagnostic.companyId })
+      expect.objectContaining({ role: "cliente", companyId })
     );
   });
 
@@ -942,7 +956,7 @@ describe("assertCompanyAccess (cliente role scoping)", () => {
 });
 
 describe("Gestão de usuários (createUser/updateUserRole/deleteUser)", () => {
-  it("cria um usuário, muda o papel e o remove", async () => {
+  it("cria um usuário, muda o papel, atrela/desatrela empresa e o remove", async () => {
     const fd = new FormData();
     fd.set("name", "Nova Consultora");
     fd.set("email", "nova@arcaconsulting.com");
@@ -952,17 +966,49 @@ describe("Gestão de usuários (createUser/updateUserRole/deleteUser)", () => {
     const redirectUrl = await expectRedirect(createUser(fd));
     expect(redirectUrl).toBe("/usuarios?sucesso=criado");
 
-    const user = await prisma.user.findFirstOrThrow({ where: { email: "nova@arcaconsulting.com" } });
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: "nova@arcaconsulting.com" } });
     expect(user.role).toBe("consultor");
     expect(user.title).toBe("Consultora Líder");
+    expect(user.companyId).toBeNull();
 
     const roleFd = new FormData();
     roleFd.set("role", "admin");
     await expectRedirect(updateUserRole(user.id, roleFd));
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role).toBe("admin");
 
+    // Atrela a usuária a uma empresa real (vira cliente).
+    const companyDiagnosticId = await createTestCompany("Empresa da Nova Consultora");
+    const companyDiagnostic = await prisma.diagnostic.findUniqueOrThrow({
+      where: { id: companyDiagnosticId },
+    });
+    const clientFd = new FormData();
+    clientFd.set("role", "cliente");
+    clientFd.set("companyId", companyDiagnostic.companyId);
+    await expectRedirect(updateUserRole(user.id, clientFd));
+    const linked = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(linked.role).toBe("cliente");
+    expect(linked.companyId).toBe(companyDiagnostic.companyId);
+
+    // Sair do papel cliente limpa o vínculo.
+    const backToAdmin = new FormData();
+    backToAdmin.set("role", "admin");
+    await expectRedirect(updateUserRole(user.id, backToAdmin));
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).companyId).toBeNull();
+
     await expectRedirect(deleteUser(user.id));
     expect(await prisma.user.findUnique({ where: { id: user.id } })).toBeNull();
+  });
+
+  it("rejeita criar um cliente sem empresa vinculada", async () => {
+    const fd = new FormData();
+    fd.set("name", "Cliente Sem Empresa");
+    fd.set("email", "cliente-sem-empresa@test.com");
+    fd.set("password", "senha123");
+    fd.set("role", "cliente");
+    fd.set("title", "Sponsor");
+    const redirectUrl = await expectRedirect(createUser(fd));
+    expect(redirectUrl).toBe("/usuarios?error=empresa-obrigatoria");
+    expect(await prisma.user.findUnique({ where: { email: "cliente-sem-empresa@test.com" } })).toBeNull();
   });
 
   it("rejeita um e-mail que já existe", async () => {

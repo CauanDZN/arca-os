@@ -108,7 +108,7 @@ export const userSchema = z.object({
   password: z.string().min(6, "A senha deve ter ao menos 6 caracteres.").max(120),
   role: z.enum(USER_ROLES),
   title: z.string().trim().max(120).default(""),
-  companyName: z
+  companyId: z
     .string()
     .trim()
     .max(120)

@@ -11,15 +11,16 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  name        String
-  email       String   @unique
-  password    String // texto puro de propósito — login mockado, não um cofre de credenciais real
-  role        String   @default("consultor") // admin | consultor | cliente
-  title       String   @default("") // cargo na visão organizacional da Arca (seção 16 do pitch do Cícero)
-  companyName String? // só para role "cliente" — resolvido para um companyId real no login
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String // texto puro de propósito — login mockado, não um cofre de credenciais real
+  role      String   @default("consultor") // admin | consultor | cliente
+  title     String   @default("") // cargo na visão organizacional da Arca (seção 16 do pitch do Cícero)
+  companyId String? // vínculo real com uma empresa (role "cliente") — definido na tela /usuarios
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Company {
@@ -46,6 +47,7 @@ model Company {
   webhookToken                String?         @unique // gerado sob demanda; null = webhook desativado pra essa empresa
   webhookEvents               WebhookEvent[]
   outboundWebhookUrl          String? // URL do ERP/CRM do cliente — ArcaOS dispara eventos (POST) pra cá
+  users                       User[] // usuários vinculados (role "cliente")
 }
 
 model WebhookEvent {

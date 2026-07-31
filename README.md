@@ -102,7 +102,8 @@ app/
   page.tsx                                Landing page
   layout.tsx                              Layout raiz + NavBar global (busca a sessão)
   login/page.tsx                          Tela de login mockado
-  usuarios/page.tsx                       Lista de usuários mockados (admin only)
+  dashboard/                              Dashboard de análise (carteira ou escopo do cliente)
+  usuarios/page.tsx                       CRUD de usuários no banco (admin only)
   actions-auth.ts                         Server actions: login, logout
   components/NavBar.tsx                   Navegação (varia por papel) + usuário logado/logout
 
@@ -127,17 +128,19 @@ app/
   actions.ts                              Server actions: criar diagnóstico, salvar respostas de área
   actions-documents.ts                    Server actions: upload/exclusão de documentos
   actions-project.ts                      Server actions: aprovar plano, mover tarefa no Kanban
+  actions-users.ts                        CRUD de usuários (admin): createUser, updateUserRole, deleteUser
+  actions-empresas.ts                     deleteCompany — exclui empresa + blobs + cascade
+  components/BarChart.tsx                 Barras horizontais CSS puras (gráficos do dashboard)
 
 lib/
   areas.ts (+ .test.ts)                   As 12 áreas e ~140 perguntas do diagnóstico
   scoring.ts (+ .test.ts)                 Motor de pontuação, maturidade, priorização, plano de ação
+  dashboard.ts (+ .test.ts)               Agregação de dados pro dashboard (buildDashboardData)
   ai.ts (+ .test.ts)                      Integração com Gemini para o texto consultivo
   pdf.tsx (+ .test.ts)                    Layout do PDF (@react-pdf/renderer)
   prisma.ts                               Cliente Prisma singleton
   session.ts (+ .test.ts)                 Tipo Session + encode/decode do cookie (puro, Edge-safe)
   auth.ts                                 getSession/setSessionCookie/clearSessionCookie (Node only)
-  actions-users.ts                        CRUD de usuários (admin): createUser, updateUserRole, deleteUser
-  actions-empresas.ts                     deleteCompany — exclui empresa + blobs + cascade
   access.ts                               assertCompanyAccess — trava o papel "cliente" na própria empresa
 
 prisma/schema.prisma                      Modelos: Company, Diagnostic, Answer, Document, Task
@@ -168,6 +171,7 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 - [x] Aprovação do plano de ação → projeto Kanban (A Fazer / Em Andamento / Concluído)
 - [x] Data Room: upload e download de documentos por empresa, categorizado por área
 - [x] Painel de empresas com histórico comparativo de diagnósticos (evolução da maturidade)
+- [x] Dashboard de análise: nota média, maturidade por área, ranking de empresas e execução da carteira
 - [x] Central de Agentes de IA (roadmap dos agentes do plano estratégico, com status real)
 - [x] Tela de Integrações externas (ERP, CRM, bancos, WhatsApp etc.) — apenas UI, nada conectado
 - [x] Suíte de testes automatizados (unitário + integração) cobrindo o fluxo completo
@@ -191,8 +195,9 @@ pode ver o quê) é real, não decorativa.
   admins/consultores/clientes — Cauan, Cícero, Camila, Marcos, Beatriz, Roberto etc.), cobrindo 3
   papéis — `admin`, `consultor` e `cliente` — mapeados pra cargos da visão organizacional do plano
   da Arca (CEO/Head BTO, Consultor Líder, Sponsor do Cliente etc.). A tela `/login` lista todos com
-  um botão de "entrar como" pra facilitar teste, e `/usuarios` (admin) permite criar, mudar papel e
-  remover usuários.
+  um botão de "entrar como" pra facilitar teste, e `/usuarios` (admin) permite criar, mudar papel,
+  **vincular um cliente a uma empresa real** (`User.companyId`, via select de empresas) e remover
+  usuários. Cliente sem empresa vinculada não consegue logar.
 - **Sessão**: cookie httpOnly com um JSON em base64 — **não é assinado nem criptografado**. Prova
   as regras de roteamento, não protege dado real contra um usuário que edite o próprio cookie.
 - **Regras**: `cliente` só acessa a empresa vinculada a ele (empresa, diagnósticos, Data Room, atas,

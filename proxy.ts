@@ -24,16 +24,6 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // "/" is the marketing splash for logged-out visitors — a logged-in user
-  // landing here (clicking the logo, a bookmark, the bare domain) should go
-  // straight to their dashboard instead of seeing it again.
-  if (pathname === "/") {
-    const destination = session.role === "cliente" && session.companyId
-      ? `/empresas/${session.companyId}`
-      : "/empresas";
-    return NextResponse.redirect(new URL(destination, request.url));
-  }
-
   if (pathname.startsWith("/usuarios") && session.role !== "admin") {
     return NextResponse.redirect(new URL("/", request.url));
   }

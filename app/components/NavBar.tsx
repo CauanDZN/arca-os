@@ -5,9 +5,17 @@ import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions-auth";
 import type { Session } from "@/lib/session";
 import { SubmitButton } from "@/app/components/SubmitButton";
-import { BuildingIcon, DocumentIcon, SparklesIcon, PlugIcon, UsersIcon } from "@/app/components/icons";
+import {
+  BuildingIcon,
+  DashboardIcon,
+  DocumentIcon,
+  SparklesIcon,
+  PlugIcon,
+  UsersIcon,
+} from "@/app/components/icons";
 
 const LINKS = [
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, roles: ["admin", "consultor", "cliente"] },
   { href: "/empresas", label: "Empresas", icon: BuildingIcon, roles: ["admin", "consultor"] },
   { href: "/relatorios", label: "Relatórios", icon: DocumentIcon, roles: ["admin", "consultor"] },
   { href: "/agentes", label: "Agentes de IA", icon: SparklesIcon, roles: ["admin", "consultor", "cliente"] },
