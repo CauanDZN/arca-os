@@ -36,12 +36,4 @@ button:not(:disabled),
   cursor: pointer;
 }
 
-/* Scroll continua funcionando (mouse, trackpad, teclado, touch) — só a barra
-   fica invisível, pra não poluir visualmente páginas de conteúdo longo. */
-* {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* Edge legado */
-}
-*::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
-}
+

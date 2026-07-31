@@ -22,10 +22,10 @@ export default async function RootLayout({
   const session = await getSession();
 
   return (
-    <html lang="pt-BR" className={`${inter.variable} h-full antialiased`}>
-      <body className="h-full flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block">
+    <html lang="pt-BR" className={`${inter.variable} antialiased`}>
+      <body className="min-h-screen flex flex-col print:min-h-0 print:block">
         <NavBar session={session} />
-        <div className="flex-1 overflow-y-auto print:overflow-visible print:h-auto">
+        <div className="flex-1 print:block">
           {children}
         </div>
       </body>

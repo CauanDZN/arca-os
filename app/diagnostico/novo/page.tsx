@@ -64,7 +64,7 @@ export default function NovoDiagnosticoPage() {
           </legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {OBJECTIVES.map((obj) => (
-              <label key={obj} className="cursor-pointer">
+              <label key={obj} className="relative cursor-pointer">
                 <input type="checkbox" name="objectives" value={obj} className="peer sr-only" />
                 <div className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2 transition-colors peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-800 hover:bg-slate-50 peer-checked:hover:bg-blue-50">
                   {obj}

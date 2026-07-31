@@ -87,7 +87,7 @@ export default async function QuestionarioAreaPage({
                     {[0, 1, 2, 3, 4, 5].map((score) => (
                       <label
                         key={score}
-                        className="flex-1 cursor-pointer text-center"
+                        className="flex-1 cursor-pointer text-center relative"
                       >
                         <input
                           type="radio"
