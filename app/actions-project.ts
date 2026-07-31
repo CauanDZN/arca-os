@@ -3,10 +3,13 @@
 import { prisma } from "@/lib/prisma";
 import { buildReport, type ActionItem } from "@/lib/scoring";
 import { taskDetailsSchema, sprintSchema, epicSchema } from "@/lib/validation";
-import type { AiNarrative } from "@/lib/ai";
+import { generateSprintReport, type AiNarrative } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
+
+const SPRINT_PERIOD_DAYS = 30;
 
 async function assertDiagnosticAccess(diagnosticId: string): Promise<{ companyId: string }> {
   const session = await getSession();
@@ -114,6 +117,45 @@ export async function moveTask(
   redirect(`/diagnostico/${diagnosticId}/projeto`);
 }
 
+const VALID_STATUSES = new Set(STATUS_ORDER);
+
+// Called from the drag-and-drop Kanban board (a Client Component), so unlike
+// the other actions here it must NOT redirect — that would force a full page
+// transition on every drop and kill the drag animation. revalidatePath is
+// enough to refresh the server-rendered data the client already reflects
+// optimistically.
+export async function reorderTasks(
+  diagnosticId: string,
+  movedTaskId: string,
+  toStatus: string,
+  orderedIdsInToStatus: string[]
+) {
+  await assertDiagnosticAccess(diagnosticId);
+  if (!VALID_STATUSES.has(toStatus)) throw new Error("Status inválido");
+
+  const movedTask = await prisma.task.findUnique({ where: { id: movedTaskId } });
+  if (!movedTask || movedTask.diagnosticId !== diagnosticId) return;
+
+  const fromStatus = movedTask.status;
+
+  await prisma.$transaction([
+    ...orderedIdsInToStatus.map((taskId, position) =>
+      prisma.task.update({
+        where: { id: taskId },
+        data: {
+          position,
+          ...(taskId === movedTaskId ? { status: toStatus } : {}),
+        },
+      })
+    ),
+    ...(fromStatus !== toStatus
+      ? [prisma.taskEvent.create({ data: { taskId: movedTaskId, fromStatus, toStatus } })]
+      : []),
+  ]);
+
+  revalidatePath(`/diagnostico/${diagnosticId}/projeto`);
+}
+
 export async function updateTaskDetails(
   diagnosticId: string,
   taskId: string,
@@ -193,4 +235,43 @@ export async function deleteEpic(diagnosticId: string, epicId: string) {
     await prisma.epic.delete({ where: { id: epicId } });
   }
   redirect(`/diagnostico/${diagnosticId}/projeto`);
+}
+
+export async function generateSprintReportAction(diagnosticId: string) {
+  await assertDiagnosticAccess(diagnosticId);
+
+  const diagnostic = await prisma.diagnostic.findUnique({
+    where: { id: diagnosticId },
+    include: { company: true },
+  });
+  if (!diagnostic) throw new Error("Diagnóstico não encontrado");
+
+  const since = new Date(Date.now() - SPRINT_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+  const events = await prisma.taskEvent.findMany({
+    where: { task: { diagnosticId }, createdAt: { gte: since } },
+    include: { task: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const sprintReportContent =
+    events.length > 0
+      ? await generateSprintReport(
+          diagnostic.company.name,
+          events.map((e) => ({
+            taskTitle: e.task.title,
+            areaName: e.task.areaName,
+            fromStatus: e.fromStatus,
+            toStatus: e.toStatus,
+            createdAt: e.createdAt,
+          })),
+          SPRINT_PERIOD_DAYS
+        )
+      : null;
+
+  await prisma.diagnostic.update({
+    where: { id: diagnosticId },
+    data: { sprintReportContent, sprintReportUpdatedAt: new Date() },
+  });
+
+  redirect(`/diagnostico/${diagnosticId}/projeto#relatorio-sprint`);
 }

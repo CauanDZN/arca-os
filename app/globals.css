@@ -28,3 +28,10 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Tailwind's Preflight deliberately doesn't set cursor:pointer on <button> —
+   browsers default it to the plain arrow, which reads as "not clickable". */
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}

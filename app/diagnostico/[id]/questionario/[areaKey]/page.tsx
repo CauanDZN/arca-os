@@ -6,6 +6,7 @@ import { saveAreaAnswers } from "@/app/actions";
 import { IMPACT_OPTIONS, URGENCY_OPTIONS, RISK_OPTIONS } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
+import { SubmitButton } from "@/app/components/SubmitButton";
 
 const SCALE_LABELS = [
   "0 · Inexistente",
@@ -199,12 +200,12 @@ export default async function QuestionarioAreaPage({
             ) : (
               <span />
             )}
-            <button
-              type="submit"
+            <SubmitButton
+              pendingText={isLast ? "Gerando relatório..." : "Salvando..."}
               className="rounded-lg bg-blue-700 text-white font-semibold px-6 py-3 hover:bg-blue-800 transition-colors shadow-sm shadow-blue-700/20"
             >
               {isLast ? "Concluir e gerar relatório" : "Próxima área →"}
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </div>

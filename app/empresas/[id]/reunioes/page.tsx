@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { MeetingMinutes } from "@/lib/ai";
 import { createMeetingNote, deleteMeetingNote } from "@/app/actions-meetings";
 import { Card } from "@/app/components/Card";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { EmptyBoxIcon, ListChecksIcon, SparklesIcon } from "@/app/components/icons";
 
 export default async function ReunioesPage({
@@ -49,12 +50,12 @@ export default async function ReunioesPage({
               placeholder="Ex.: Reunião com a diretoria em 30/07. Discutimos o atraso na contratação do gerente comercial. Ana ficou de fechar a vaga até sexta. Decidido adiar o lançamento da nova linha para setembro..."
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
             />
-            <button
-              type="submit"
+            <SubmitButton
+              pendingText="Gerando ata..."
               className="rounded-lg bg-blue-700 text-white font-semibold px-5 py-2 text-sm hover:bg-blue-800 transition-colors"
             >
               Gerar ata
-            </button>
+            </SubmitButton>
             {!hasGeminiKey && (
               <p className="text-xs text-slate-400">
                 Sem chave de IA configurada — as anotações serão salvas, mas sem estruturação automática.
@@ -74,9 +75,9 @@ export default async function ReunioesPage({
                     {new Date(note.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </span>
                   <form action={deleteMeetingNote.bind(null, id, note.id)}>
-                    <button type="submit" className="text-xs text-red-600 hover:underline">
+                    <SubmitButton pendingText="Removendo..." className="text-xs text-red-600 hover:underline disabled:no-underline">
                       Remover
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
 

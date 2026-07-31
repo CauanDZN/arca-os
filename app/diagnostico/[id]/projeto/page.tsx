@@ -1,15 +1,21 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { moveTask, updateTaskDetails, createSprint, deleteSprint, createEpic, deleteEpic } from "@/app/actions-project";
-import { priorityTone } from "@/lib/badge-tones";
+import {
+  createSprint,
+  deleteSprint,
+  createEpic,
+  deleteEpic,
+  generateSprintReportAction,
+} from "@/app/actions-project";
 import { findAtRiskTasks } from "@/lib/pmo";
 import { findScrumIssues } from "@/lib/scrum-master";
-import { generateSprintReport } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
-import { Badge } from "@/app/components/Badge";
 import { Card } from "@/app/components/Card";
+import { SubmitButton } from "@/app/components/SubmitButton";
+import { ExpandableTrigger } from "@/app/components/ExpandableTrigger";
+import { KanbanBoardClient } from "@/app/components/KanbanBoardClient";
 import { EmptyBoxIcon, SparklesIcon } from "@/app/components/icons";
 
 const COLUMNS: { status: string; title: string; accent: string }[] = [
@@ -97,28 +103,13 @@ export default async function ProjetoPage({
   });
 
   const since = new Date(now.getTime() - SPRINT_PERIOD_DAYS * 24 * 60 * 60 * 1000);
-  const events =
+  const recentEventCount =
     totalTasks > 0
-      ? await prisma.taskEvent.findMany({
+      ? await prisma.taskEvent.count({
           where: { task: { diagnosticId: id }, createdAt: { gte: since } },
-          include: { task: true },
-          orderBy: { createdAt: "asc" },
         })
-      : [];
-  const sprintReport =
-    events.length > 0
-      ? await generateSprintReport(
-          diagnostic.company.name,
-          events.map((e) => ({
-            taskTitle: e.task.title,
-            areaName: e.task.areaName,
-            fromStatus: e.fromStatus,
-            toStatus: e.toStatus,
-            createdAt: e.createdAt,
-          })),
-          SPRINT_PERIOD_DAYS
-        )
-      : null;
+      : 0;
+  const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
@@ -229,9 +220,12 @@ export default async function ProjetoPage({
                           {epic.description && <p className="text-xs text-slate-500">{epic.description}</p>}
                         </div>
                         <form action={deleteEpic.bind(null, id, epic.id)}>
-                          <button type="submit" className="text-xs text-red-600 hover:underline whitespace-nowrap">
+                          <SubmitButton
+                            pendingText="Removendo..."
+                            className="text-xs text-red-600 hover:underline whitespace-nowrap disabled:no-underline"
+                          >
                             Remover
-                          </button>
+                          </SubmitButton>
                         </form>
                       </div>
                       <p className="text-xs text-slate-400 mb-1.5">{done} de {total} ações</p>
@@ -245,13 +239,10 @@ export default async function ProjetoPage({
                   ))}
                 </div>
               )}
-              <details className="group">
-                <summary className="cursor-pointer text-xs font-medium text-blue-700 select-none">
-                  + Novo épico
-                </summary>
+              <ExpandableTrigger label="Novo épico">
                 <form
                   action={createEpic.bind(null, id)}
-                  className="mt-3 grid grid-cols-1 gap-3"
+                  className="grid grid-cols-1 gap-3"
                 >
                   <label className="block">
                     <span className="block text-xs font-medium text-slate-600 mb-1">Nome</span>
@@ -271,14 +262,14 @@ export default async function ProjetoPage({
                       className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
                     />
                   </label>
-                  <button
-                    type="submit"
+                  <SubmitButton
+                    pendingText="Criando..."
                     className="self-start rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
                   >
                     Criar épico
-                  </button>
+                  </SubmitButton>
                 </form>
-              </details>
+              </ExpandableTrigger>
             </Card>
 
             <Card>
@@ -293,9 +284,12 @@ export default async function ProjetoPage({
                           {sprint.goal && <p className="text-xs text-slate-500">{sprint.goal}</p>}
                         </div>
                         <form action={deleteSprint.bind(null, id, sprint.id)}>
-                          <button type="submit" className="text-xs text-red-600 hover:underline whitespace-nowrap">
+                          <SubmitButton
+                            pendingText="Removendo..."
+                            className="text-xs text-red-600 hover:underline whitespace-nowrap disabled:no-underline"
+                          >
                             Remover
-                          </button>
+                          </SubmitButton>
                         </form>
                       </div>
                       <p className="text-xs text-slate-400 mb-1.5">
@@ -312,13 +306,10 @@ export default async function ProjetoPage({
                   ))}
                 </div>
               )}
-              <details className="group">
-                <summary className="cursor-pointer text-xs font-medium text-blue-700 select-none">
-                  + Novo sprint
-                </summary>
+              <ExpandableTrigger label="Novo sprint">
                 <form
                   action={createSprint.bind(null, id)}
-                  className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3"
                 >
                   <label className="block sm:col-span-2">
                     <span className="block text-xs font-medium text-slate-600 mb-1">Nome</span>
@@ -357,204 +348,88 @@ export default async function ProjetoPage({
                       className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
                     />
                   </label>
-                  <button
-                    type="submit"
+                  <SubmitButton
+                    pendingText="Criando..."
                     className="self-start rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors sm:col-span-2"
                   >
                     Criar sprint
-                  </button>
+                  </SubmitButton>
                 </form>
-              </details>
+              </ExpandableTrigger>
             </Card>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {COLUMNS.map((col) => {
-                const columnTasks = diagnostic.tasks.filter((t) => t.status === col.status);
-                return (
-                  <div
-                    key={col.status}
-                    className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4"
-                  >
-                    <h2 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full ${col.accent}`} />
-                      {col.title}
-                      <span className="ml-auto text-xs font-normal text-slate-400">
-                        {columnTasks.length}
-                      </span>
-                    </h2>
-                    <div className="space-y-3">
-                      {columnTasks.map((task) => {
-                        const isOverdue = overdueTaskIds.has(task.id);
-                        const sprintName = diagnostic.sprints.find((s) => s.id === task.sprintId)?.name;
-                        const epicName = diagnostic.epics.find((e) => e.id === task.epicId)?.name;
-                        return (
-                          <div
-                            key={task.id}
-                            className="rounded-lg border border-slate-200 p-3 hover:border-slate-300 transition-colors"
-                          >
-                            <p className="text-xs text-slate-500 mb-1">{task.areaName}</p>
-                            <p className="text-sm font-medium text-slate-900 mb-1">{task.title}</p>
-                            {task.rootCause && (
-                              <p className="text-xs text-slate-500 italic mb-2">Causa: {task.rootCause}</p>
-                            )}
-                            <div className="flex items-center justify-between flex-wrap gap-1.5">
-                              <Badge text={task.priority} tone={priorityTone(task.priority)} />
-                              <span className="text-xs text-slate-400">{task.timeframe}</span>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
-                              {task.responsible && (
-                                <span className="text-slate-600">{task.responsible}</span>
-                              )}
-                              {task.dueDate && (
-                                <span className={isOverdue ? "font-semibold text-red-600" : "text-slate-500"}>
-                                  {isOverdue ? "Atrasada · " : "Prazo: "}
-                                  {new Date(task.dueDate).toLocaleDateString("pt-BR")}
-                                </span>
-                              )}
-                              {epicName && (
-                                <span className="text-slate-700 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">
-                                  {epicName}
-                                </span>
-                              )}
-                              {sprintName && (
-                                <span className="text-blue-700 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">
-                                  {sprintName}
-                                </span>
-                              )}
-                            </div>
+            <KanbanBoardClient
+              diagnosticId={id}
+              columns={COLUMNS}
+              epics={diagnostic.epics.map((e) => ({ id: e.id, name: e.name }))}
+              sprints={diagnostic.sprints.map((s) => ({ id: s.id, name: s.name }))}
+              initialTasks={diagnostic.tasks.map((task) => ({
+                id: task.id,
+                title: task.title,
+                areaName: task.areaName,
+                priority: task.priority,
+                timeframe: task.timeframe,
+                status: task.status,
+                position: task.position,
+                responsible: task.responsible,
+                dueDate: task.dueDate,
+                rootCause: task.rootCause,
+                successIndicator: task.successIndicator,
+                dependencies: task.dependencies,
+                completionEvidence: task.completionEvidence,
+                epicId: task.epicId,
+                sprintId: task.sprintId,
+                isOverdue: overdueTaskIds.has(task.id),
+                sprintName: diagnostic.sprints.find((s) => s.id === task.sprintId)?.name,
+                epicName: diagnostic.epics.find((e) => e.id === task.epicId)?.name,
+              }))}
+            />
 
-                            <details className="mt-2 group">
-                              <summary className="cursor-pointer text-xs font-medium text-blue-700 select-none">
-                                + Detalhes
-                              </summary>
-                              <form
-                                action={updateTaskDetails.bind(null, id, task.id)}
-                                className="mt-2 flex flex-col gap-1.5"
-                              >
-                                <input
-                                  type="text"
-                                  name="responsible"
-                                  defaultValue={task.responsible}
-                                  placeholder="Responsável"
-                                  className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
-                                />
-                                <input
-                                  type="date"
-                                  name="dueDate"
-                                  defaultValue={
-                                    task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : ""
-                                  }
-                                  className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
-                                />
-                                {diagnostic.epics.length > 0 && (
-                                  <select
-                                    name="epicId"
-                                    defaultValue={task.epicId ?? ""}
-                                    className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs bg-white"
-                                  >
-                                    <option value="">Sem épico</option>
-                                    {diagnostic.epics.map((e) => (
-                                      <option key={e.id} value={e.id}>
-                                        {e.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                {diagnostic.sprints.length > 0 && (
-                                  <select
-                                    name="sprintId"
-                                    defaultValue={task.sprintId ?? ""}
-                                    className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs bg-white"
-                                  >
-                                    <option value="">Sem sprint</option>
-                                    {diagnostic.sprints.map((s) => (
-                                      <option key={s.id} value={s.id}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                <input
-                                  type="text"
-                                  name="successIndicator"
-                                  defaultValue={task.successIndicator}
-                                  placeholder="Indicador de sucesso"
-                                  className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
-                                />
-                                <input
-                                  type="text"
-                                  name="dependencies"
-                                  defaultValue={task.dependencies}
-                                  placeholder="Dependências"
-                                  className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
-                                />
-                                <input
-                                  type="text"
-                                  name="completionEvidence"
-                                  defaultValue={task.completionEvidence}
-                                  placeholder="Evidência de conclusão"
-                                  className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
-                                />
-                                <button
-                                  type="submit"
-                                  className="self-start rounded-md bg-slate-800 text-white text-xs font-semibold px-2.5 py-1 hover:bg-slate-900 transition-colors"
-                                >
-                                  Salvar
-                                </button>
-                              </form>
-                            </details>
-
-                            <div className="mt-2 flex gap-2">
-                              {col.status !== "todo" && (
-                                <form action={moveTask.bind(null, id, task.id, "backward")}>
-                                  <button
-                                    type="submit"
-                                    className="text-xs text-slate-500 hover:text-slate-800 hover:underline"
-                                  >
-                                    ← Voltar
-                                  </button>
-                                </form>
-                              )}
-                              {col.status !== "done" && (
-                                <form action={moveTask.bind(null, id, task.id, "forward")} className="ml-auto">
-                                  <button
-                                    type="submit"
-                                    className="text-xs text-blue-700 hover:underline"
-                                  >
-                                    Avançar →
-                                  </button>
-                                </form>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {columnTasks.length === 0 && (
-                        <p className="text-xs text-slate-400 text-center py-6">Vazio</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <Card>
+            <Card id="relatorio-sprint">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900 mb-3">
                 <SparklesIcon className="w-4 h-4 text-blue-700" />
                 Agente de Relatório de Sprint
               </h2>
-              {sprintReport ? (
+              {diagnostic.sprintReportContent ? (
                 <div className="rounded-xl bg-blue-50/70 border border-blue-100 p-4">
                   <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">
                     Últimos {SPRINT_PERIOD_DAYS} dias · Gerado por IA
+                    {diagnostic.sprintReportUpdatedAt && (
+                      <span className="normal-case font-normal text-blue-600">
+                        {" "}
+                        · atualizado em{" "}
+                        {new Date(diagnostic.sprintReportUpdatedAt).toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
                   </p>
-                  <p className="text-sm text-slate-800 leading-relaxed">{sprintReport}</p>
+                  <p className="text-sm text-slate-800 leading-relaxed mb-3">
+                    {diagnostic.sprintReportContent}
+                  </p>
+                  <form action={generateSprintReportAction.bind(null, id)}>
+                    <SubmitButton
+                      pendingText="Gerando..."
+                      className="text-xs font-medium text-blue-700 hover:underline disabled:no-underline"
+                    >
+                      Atualizar resumo
+                    </SubmitButton>
+                  </form>
                 </div>
+              ) : recentEventCount === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Nenhuma movimentação no quadro nos últimos {SPRINT_PERIOD_DAYS} dias.
+                </p>
+              ) : hasGeminiKey ? (
+                <form action={generateSprintReportAction.bind(null, id)}>
+                  <SubmitButton
+                    pendingText="Gerando resumo..."
+                    className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                  >
+                    Gerar resumo com o Agente de Sprint →
+                  </SubmitButton>
+                </form>
               ) : (
                 <p className="text-sm text-slate-500">
-                  {events.length === 0
-                    ? `Nenhuma movimentação no quadro nos últimos ${SPRINT_PERIOD_DAYS} dias.`
-                    : "Sem chave de IA configurada — resumo automático indisponível."}
+                  Sem chave de IA configurada — resumo automático indisponível.
                 </p>
               )}
             </Card>

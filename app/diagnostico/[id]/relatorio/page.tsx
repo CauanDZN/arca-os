@@ -15,16 +15,9 @@ import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ScoreBar } from "@/app/components/ScoreBar";
 import { StatTile } from "@/app/components/StatTile";
+import { SubmitButton } from "@/app/components/SubmitButton";
+import { ReportTabs, type ReportSection } from "@/app/components/ReportTabs";
 import { SparklesIcon } from "@/app/components/icons";
-
-const SECTIONS = [
-  { id: "sumario", label: "Sumário" },
-  { id: "maturidade", label: "Maturidade" },
-  { id: "analitico", label: "Diagnóstico" },
-  { id: "especialistas", label: "Agentes Especialistas" },
-  { id: "priorizacao", label: "Priorização" },
-  { id: "plano", label: "Plano de Ação" },
-];
 
 export default async function RelatorioPage({
   params,
@@ -71,68 +64,16 @@ export default async function RelatorioPage({
     return { area, areaScore, insight: verticalInsightByArea.get(key) ?? null };
   });
 
-  return (
-    <main className="flex-1 bg-slate-50 py-10 px-4 print:bg-white">
-      <div className="mx-auto max-w-4xl space-y-6">
-        <div className="flex items-center justify-between print:hidden">
-          <Link href="/" className="text-sm text-slate-500 hover:text-slate-800">
-            ← Voltar ao início
-          </Link>
-          <div className="flex gap-2">
-            <a
-              href={`/api/diagnostico/${id}/export`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              Exportar CSV
-            </a>
-            <a
-              href={`/api/diagnostico/${id}/pdf`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              Baixar PDF
-            </a>
-            <PrintButton />
-          </div>
-        </div>
-
-        {/* In-page section nav — this report has 5 sections and can get long */}
-        <nav className="print:hidden flex flex-wrap gap-1.5 text-xs font-medium">
-          {SECTIONS.map((s) => (
-            <a
-              key={s.id}
-              href={`#${s.id}`}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
-            >
-              {s.label}
-            </a>
-          ))}
-        </nav>
-
-        {evidenceGaps.length > 0 && (
-          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4">
-            <p className="flex items-center gap-1.5 text-sm text-amber-900">
-              <SparklesIcon className="w-4 h-4 shrink-0" />
-              <span>
-                <span className="font-semibold">Agente de Auditoria de Evidências:</span>{" "}
-                {evidenceGaps.length} {evidenceGaps.length === 1 ? "resposta crítica está" : "respostas críticas estão"}{" "}
-                sem evidência anexada.{" "}
-                <a href="#analitico" className="underline hover:no-underline">
-                  Veja marcadas em Diagnóstico Analítico
-                </a>
-                .
-              </span>
-            </p>
-          </div>
-        )}
-
-        {/* 1. Sumário Executivo */}
+  const sections: ReportSection[] = [
+    {
+      id: "sumario",
+      label: "Sumário",
+      content: (
         <Card id="sumario">
           <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             Relatório Executivo · Arca Scan 360
           </p>
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">
-            {diagnostic.company.name}
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900 mb-4">{diagnostic.company.name}</h1>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <StatTile label="Nota geral de maturidade">
@@ -187,12 +128,14 @@ export default async function RelatorioPage({
             </div>
           </div>
         </Card>
-
-        {/* 2. Mapa de Maturidade por Área */}
+      ),
+    },
+    {
+      id: "maturidade",
+      label: "Maturidade",
+      content: (
         <Card id="maturidade">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">
-            Mapa de Maturidade por Área
-          </h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Mapa de Maturidade por Área</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -220,13 +163,15 @@ export default async function RelatorioPage({
             </table>
           </div>
         </Card>
-
-        {/* 3. Diagnóstico Analítico */}
+      ),
+    },
+    {
+      id: "analitico",
+      label: "Diagnóstico",
+      content: (
         <Card id="analitico">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-slate-900">
-              Diagnóstico Analítico
-            </h2>
+            <h2 className="text-xl font-bold text-slate-900">Diagnóstico Analítico</h2>
             <span className="text-xs text-slate-400">{areasWithGaps.length} áreas com gaps</span>
           </div>
           <div className="space-y-2">
@@ -278,8 +223,12 @@ export default async function RelatorioPage({
             })}
           </div>
         </Card>
-
-        {/* Agentes Especialistas por Área */}
+      ),
+    },
+    {
+      id: "especialistas",
+      label: "Agentes Especialistas",
+      content: (
         <Card id="especialistas">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-xl font-bold text-slate-900">Agentes Especialistas por Área</h2>
@@ -318,22 +267,22 @@ export default async function RelatorioPage({
                         </ul>
                       )}
                       <form action={generateVerticalInsightAction.bind(null, id, area.key)} className="mt-3">
-                        <button
-                          type="submit"
-                          className="text-xs font-medium text-blue-700 hover:underline"
+                        <SubmitButton
+                          pendingText="Gerando..."
+                          className="text-xs font-medium text-blue-700 hover:underline disabled:no-underline"
                         >
                           Gerar novamente
-                        </button>
+                        </SubmitButton>
                       </form>
                     </div>
                   ) : hasGeminiKey ? (
                     <form action={generateVerticalInsightAction.bind(null, id, area.key)}>
-                      <button
-                        type="submit"
+                      <SubmitButton
+                        pendingText="Gerando análise..."
                         className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
                       >
                         Gerar análise com o Agente Especialista →
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : (
                     <p className="text-sm text-slate-500">
@@ -345,12 +294,14 @@ export default async function RelatorioPage({
             ))}
           </div>
         </Card>
-
-        {/* 4. Matriz de Priorização */}
+      ),
+    },
+    {
+      id: "priorizacao",
+      label: "Priorização",
+      content: (
         <Card id="priorizacao">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">
-            Matriz de Priorização
-          </h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Matriz de Priorização</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -374,13 +325,15 @@ export default async function RelatorioPage({
             </table>
           </div>
         </Card>
-
-        {/* 5. Plano de Ação Recomendado */}
+      ),
+    },
+    {
+      id: "plano",
+      label: "Plano de Ação",
+      content: (
         <Card id="plano">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h2 className="text-xl font-bold text-slate-900">
-              Plano de Ação Recomendado
-            </h2>
+            <h2 className="text-xl font-bold text-slate-900">Plano de Ação Recomendado</h2>
             {diagnostic.tasks.length > 0 ? (
               <Link
                 href={`/diagnostico/${id}/projeto`}
@@ -390,12 +343,12 @@ export default async function RelatorioPage({
               </Link>
             ) : (
               <form action={approveActionPlan.bind(null, id)}>
-                <button
-                  type="submit"
+                <SubmitButton
+                  pendingText="Aprovando..."
                   className="rounded-lg bg-blue-700 text-white font-semibold px-4 py-2 text-sm hover:bg-blue-800 transition-colors"
                 >
                   Aprovar plano e criar projeto →
-                </button>
+                </SubmitButton>
               </form>
             )}
           </div>
@@ -405,6 +358,48 @@ export default async function RelatorioPage({
             <ActionBlock title="3 a 12 meses" items={report.actionPlan.months12} />
           </div>
         </Card>
+      ),
+    },
+  ];
+
+  return (
+    <main className="flex-1 bg-slate-50 py-10 px-4 print:bg-white">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="flex items-center justify-between print:hidden">
+          <Link href="/" className="text-sm text-slate-500 hover:text-slate-800">
+            ← Voltar ao início
+          </Link>
+          <div className="flex gap-2">
+            <a
+              href={`/api/diagnostico/${id}/export`}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Exportar CSV
+            </a>
+            <a
+              href={`/api/diagnostico/${id}/pdf`}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Baixar PDF
+            </a>
+            <PrintButton />
+          </div>
+        </div>
+
+        {evidenceGaps.length > 0 && (
+          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 print:hidden">
+            <p className="flex items-center gap-1.5 text-sm text-amber-900">
+              <SparklesIcon className="w-4 h-4 shrink-0" />
+              <span>
+                <span className="font-semibold">Agente de Auditoria de Evidências:</span>{" "}
+                {evidenceGaps.length} {evidenceGaps.length === 1 ? "resposta crítica está" : "respostas críticas estão"}{" "}
+                sem evidência anexada — veja marcadas em "Diagnóstico".
+              </span>
+            </p>
+          </div>
+        )}
+
+        <ReportTabs sections={sections} />
       </div>
     </main>
   );

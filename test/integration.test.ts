@@ -13,6 +13,14 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+// revalidatePath requires a real Next.js request-scoped store (it throws
+// "Invariant: static generation store missing" outside of one) — reorderTasks
+// is called directly here as a plain async function, not through a request,
+// so there's nothing to revalidate and the call is a no-op in tests.
+vi.mock("next/cache", () => ({
+  revalidatePath: () => {},
+}));
+
 const mockGetSession = vi.hoisted(() => vi.fn());
 const mockSetSessionCookie = vi.hoisted(() => vi.fn());
 const mockClearSessionCookie = vi.hoisted(() => vi.fn());
@@ -47,6 +55,7 @@ import { createDiagnostic, saveAreaAnswers } from "@/app/actions";
 import {
   approveActionPlan,
   moveTask,
+  reorderTasks,
   updateTaskDetails,
   createSprint,
   deleteSprint,
@@ -248,6 +257,36 @@ describe("approveActionPlan + moveTask (Kanban)", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({ fromStatus: "todo", toStatus: "doing" });
     expect(events[1]).toMatchObject({ fromStatus: "doing", toStatus: "done" });
+  });
+
+  it("reorderTasks persists drag-and-drop order and logs a TaskEvent only on a real status change", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Kanban Drag");
+    await completeAllAreas(diagnosticId, 0);
+    await expectRedirect(approveActionPlan(diagnosticId));
+    const todoTasks = await prisma.task.findMany({
+      where: { diagnosticId, status: "todo" },
+      orderBy: { position: "asc" },
+    });
+    expect(todoTasks.length).toBeGreaterThanOrEqual(2);
+    const [first, second] = todoTasks;
+
+    // reordering within the same column: swap the first two, status unchanged
+    await reorderTasks(diagnosticId, second.id, "todo", [second.id, first.id]);
+    const reordered = await prisma.task.findMany({
+      where: { diagnosticId, status: "todo" },
+      orderBy: { position: "asc" },
+    });
+    expect(reordered[0].id).toBe(second.id);
+    expect(reordered[1].id).toBe(first.id);
+    expect(await prisma.taskEvent.count({ where: { taskId: second.id } })).toBe(0);
+
+    // dragging across columns: status changes and a TaskEvent is logged
+    await reorderTasks(diagnosticId, first.id, "doing", [first.id]);
+    const moved = await prisma.task.findUniqueOrThrow({ where: { id: first.id } });
+    expect(moved.status).toBe("doing");
+    const events = await prisma.taskEvent.findMany({ where: { taskId: first.id } });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ fromStatus: "todo", toStatus: "doing" });
   });
 
   it("updateTaskDetails persists a standardized responsible name and due date", async () => {

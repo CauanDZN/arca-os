@@ -2,10 +2,16 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaByKey } from "@/lib/areas";
-import { upsertKpiEntry, deleteKpiEntry, applyKpiSuggestion, rejectKpiSuggestion } from "@/app/actions-kpis";
-import { generatePerformanceInsight } from "@/lib/ai";
+import {
+  upsertKpiEntry,
+  deleteKpiEntry,
+  applyKpiSuggestion,
+  rejectKpiSuggestion,
+  generatePerformanceInsightAction,
+} from "@/app/actions-kpis";
 import { findKpiAlerts } from "@/lib/strategic-alerts";
 import { Card } from "@/app/components/Card";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { EmptyBoxIcon, TrendingUpIcon, SparklesIcon } from "@/app/components/icons";
 
 export default async function IndicadoresPage({
@@ -38,8 +44,8 @@ export default async function IndicadoresPage({
     month: e.month,
     value: e.value,
   }));
-  const performanceInsight = await generatePerformanceInsight(company.name, entriesForAgents);
   const kpiAlerts = findKpiAlerts(entriesForAgents);
+  const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
@@ -109,12 +115,12 @@ export default async function IndicadoresPage({
                 className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm"
               />
             </label>
-            <button
-              type="submit"
+            <SubmitButton
+              pendingText="Salvando..."
               className="rounded-lg bg-blue-700 text-white font-semibold px-5 py-2 text-sm hover:bg-blue-800 transition-colors sm:col-span-2 self-start"
             >
               Salvar indicador
-            </button>
+            </SubmitButton>
           </form>
 
           {company.kpiEntries.length > 0 && (
@@ -151,14 +157,20 @@ export default async function IndicadoresPage({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <form action={applyKpiSuggestion.bind(null, id, s.id)}>
-                      <button type="submit" className="text-xs font-semibold text-green-700 hover:underline">
+                      <SubmitButton
+                        pendingText="Aplicando..."
+                        className="text-xs font-semibold text-green-700 hover:underline disabled:no-underline"
+                      >
                         Aplicar
-                      </button>
+                      </SubmitButton>
                     </form>
                     <form action={rejectKpiSuggestion.bind(null, id, s.id)}>
-                      <button type="submit" className="text-xs text-red-600 hover:underline">
+                      <SubmitButton
+                        pendingText="Rejeitando..."
+                        className="text-xs text-red-600 hover:underline disabled:no-underline"
+                      >
                         Rejeitar
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -188,13 +200,46 @@ export default async function IndicadoresPage({
           </Card>
         )}
 
-        {performanceInsight && (
-          <Card>
+        {company.kpiEntries.length > 0 && (
+          <Card id="performance">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">
               <SparklesIcon className="w-3.5 h-3.5" />
-              Agente de Performance por Área · Gerado por IA
+              Agente de Performance por Área
+              {company.performanceInsight && company.performanceInsightUpdatedAt && (
+                <span className="normal-case font-normal text-blue-600">
+                  · atualizado em{" "}
+                  {new Date(company.performanceInsightUpdatedAt).toLocaleDateString("pt-BR")}
+                </span>
+              )}
             </p>
-            <p className="text-sm text-slate-800 leading-relaxed">{performanceInsight}</p>
+            {company.performanceInsight ? (
+              <>
+                <p className="text-sm text-slate-800 leading-relaxed mb-3">
+                  {company.performanceInsight}
+                </p>
+                <form action={generatePerformanceInsightAction.bind(null, id)}>
+                  <SubmitButton
+                    pendingText="Gerando..."
+                    className="text-xs font-medium text-blue-700 hover:underline disabled:no-underline"
+                  >
+                    Atualizar análise
+                  </SubmitButton>
+                </form>
+              </>
+            ) : hasGeminiKey ? (
+              <form action={generatePerformanceInsightAction.bind(null, id)}>
+                <SubmitButton
+                  pendingText="Gerando análise..."
+                  className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                >
+                  Gerar análise com o Agente de Performance →
+                </SubmitButton>
+              </form>
+            ) : (
+              <p className="text-sm text-slate-500">
+                Sem chave de IA configurada — análise automática indisponível.
+              </p>
+            )}
           </Card>
         )}
 
@@ -234,9 +279,9 @@ export default async function IndicadoresPage({
                           </td>
                           <td className="py-1.5 text-right">
                             <form action={deleteKpiEntry.bind(null, id, entry.id)}>
-                              <button type="submit" className="text-xs text-red-600 hover:underline">
+                              <SubmitButton pendingText="Removendo..." className="text-xs text-red-600 hover:underline disabled:no-underline">
                                 Remover
-                              </button>
+                              </SubmitButton>
                             </form>
                           </td>
                         </tr>

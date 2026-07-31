@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions-auth";
 import type { Session } from "@/lib/session";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { BuildingIcon, DocumentIcon, SparklesIcon, PlugIcon } from "@/app/components/icons";
 
 const LINKS = [
@@ -74,12 +75,12 @@ export function NavBar({ session }: { session: Session | null }) {
               </p>
             </div>
             <form action={logout}>
-              <button
-                type="submit"
+              <SubmitButton
+                pendingText="Saindo..."
                 className="text-xs font-semibold text-slate-500 hover:text-slate-800 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-100 transition-colors"
               >
                 Sair
-              </button>
+              </SubmitButton>
             </form>
           </div>
         )}

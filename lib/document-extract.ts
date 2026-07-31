@@ -3,10 +3,11 @@ import { PDFParse } from "pdf-parse";
 const MAX_CHARS = 4000;
 
 /**
- * Best-effort text extraction for the Classificador de Documentos agent.
- * Only PDF and plain-text files are supported today — images, spreadsheets
- * and Office docs return null so the caller can honestly report "conteúdo
- * não pôde ser lido" instead of guessing from the filename alone.
+ * Best-effort text extraction for the Classificador de Documentos and Agente
+ * de Extração de Indicadores. PDF, plain-text and XML (NF-e/NFS-e are almost
+ * always XML) are supported — images, spreadsheets and Office docs return
+ * null so the caller can honestly report "conteúdo não pôde ser lido"
+ * instead of guessing from the filename alone.
  */
 export async function extractDocumentText(buffer: Buffer, mimeType: string): Promise<string | null> {
   try {
@@ -21,7 +22,7 @@ export async function extractDocumentText(buffer: Buffer, mimeType: string): Pro
       }
     }
 
-    if (mimeType.startsWith("text/")) {
+    if (mimeType.startsWith("text/") || mimeType === "application/xml") {
       const text = buffer.toString("utf-8").trim();
       return text ? text.slice(0, MAX_CHARS) : null;
     }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
-import { generateMaturityEvolution, type MeetingMinutes } from "@/lib/ai";
+import type { MeetingMinutes } from "@/lib/ai";
 import { findAtRiskTasks } from "@/lib/pmo";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
@@ -47,16 +47,12 @@ export default async function EmpresaDetailPage({
     return { diagnostic: d, report };
   });
 
-  let evolutionNarrative: string | null = null;
-  if (diagnosticsWithScore.length > 1) {
-    const previous = diagnosticsWithScore[diagnosticsWithScore.length - 2];
-    const current = diagnosticsWithScore[diagnosticsWithScore.length - 1];
-    evolutionNarrative = await generateMaturityEvolution(
-      company.name,
-      { date: previous.diagnostic.createdAt, report: previous.report },
-      { date: current.diagnostic.createdAt, report: current.report }
-    );
-  }
+  // Generated once, at diagnostic completion (app/actions.ts) — reading it
+  // here is free; it used to call Gemini live on every visit to this page.
+  const evolutionNarrative: string | null =
+    diagnosticsWithScore.length > 1
+      ? diagnosticsWithScore[diagnosticsWithScore.length - 1].diagnostic.evolutionNarrative
+      : null;
 
   const inExecution = [...diagnosticsWithScore].reverse().find((d) => d.diagnostic.tasks.length > 0);
   let execution: {

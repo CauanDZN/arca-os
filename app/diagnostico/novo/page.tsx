@@ -1,5 +1,6 @@
 import { createDiagnostic } from "@/app/actions";
 import { OBJECTIVES } from "@/lib/areas";
+import { SubmitButton } from "@/app/components/SubmitButton";
 
 export default function NovoDiagnosticoPage() {
   return (
@@ -73,12 +74,12 @@ export default function NovoDiagnosticoPage() {
           </div>
         </fieldset>
 
-        <button
-          type="submit"
+        <SubmitButton
+          pendingText="Criando..."
           className="mt-8 w-full rounded-lg bg-blue-700 text-white font-semibold py-3 hover:bg-blue-800 transition-colors shadow-sm shadow-blue-700/20"
         >
           Iniciar Questionário
-        </button>
+        </SubmitButton>
       </form>
     </main>
   );

@@ -75,6 +75,14 @@ que já existiam antes do RBAC continuam passando sem saber que auth existe. Tes
 validar o bloqueio de `cliente` chamam `mockGetSession.mockResolvedValue({ role: "cliente", ... })`
 antes da chamada que deve falhar.
 
+**Mockando `next/cache`** (`test/integration.test.ts`): `revalidatePath()` de verdade exige um
+request-scoped store do Next.js (`Invariant: static generation store missing`) que só existe
+dentro de uma requisição real — chamar a Server Action direto como função (como o teste faz) não
+tem esse contexto. O mock (`revalidatePath: () => {}`) é um no-op; usado por `reorderTasks`
+(drag-and-drop do Kanban), que não pode chamar `redirect()` como as outras actions porque é
+invocada de um Client Component sem submit de formulário — um redirect ali mataria a animação de
+arrastar a cada solto.
+
 ## Comandos úteis
 
 ```bash

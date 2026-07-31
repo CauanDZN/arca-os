@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAreaByKey } from "@/lib/areas";
 import { kpiEntrySchema } from "@/lib/validation";
+import { generatePerformanceInsight } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { redirect } from "next/navigation";
@@ -90,4 +91,29 @@ export async function rejectKpiSuggestion(companyId: string, suggestionId: strin
     await prisma.kpiSuggestion.update({ where: { id: suggestionId }, data: { status: "rejeitada" } });
   }
   redirect(`/empresas/${companyId}/indicadores`);
+}
+
+export async function generatePerformanceInsightAction(companyId: string) {
+  assertCompanyAccess(await getSession(), companyId);
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    include: { kpiEntries: { orderBy: { month: "asc" } } },
+  });
+  if (!company) throw new Error("Empresa não encontrada");
+
+  const entriesForAgents = company.kpiEntries.map((e) => ({
+    areaName: getAreaByKey(e.areaKey)?.name ?? e.areaKey,
+    indicatorName: e.indicatorName,
+    month: e.month,
+    value: e.value,
+  }));
+  const performanceInsight = await generatePerformanceInsight(company.name, entriesForAgents);
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { performanceInsight, performanceInsightUpdatedAt: new Date() },
+  });
+
+  redirect(`/empresas/${companyId}/indicadores#performance`);
 }

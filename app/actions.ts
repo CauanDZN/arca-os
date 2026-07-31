@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaIndex } from "@/lib/areas";
 import { buildReport } from "@/lib/scoring";
-import { generateAiNarrative } from "@/lib/ai";
+import { generateAiNarrative, generateMaturityEvolution } from "@/lib/ai";
 import { answerFieldsSchema } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
@@ -92,6 +92,7 @@ export async function saveAreaAnswers(
     });
 
     let aiNarrative: string | null = null;
+    let evolutionNarrative: string | null = null;
     if (diagnostic) {
       const report = buildReport(
         diagnostic.answers.map((a) => ({
@@ -110,11 +111,38 @@ export async function saveAreaAnswers(
         report
       );
       if (narrative) aiNarrative = JSON.stringify(narrative);
+
+      // Generated once here, not on every visit to the empresa cockpit — the
+      // comparison is between two now-immutable diagnostics, so re-running it
+      // later would never produce a different answer anyway.
+      const previousDiagnostic = await prisma.diagnostic.findFirst({
+        where: {
+          companyId: diagnostic.companyId,
+          id: { not: diagnosticId },
+          status: { in: ["concluido", "em_execucao"] },
+        },
+        orderBy: { createdAt: "desc" },
+        include: { answers: true },
+      });
+      if (previousDiagnostic) {
+        const previousReport = buildReport(
+          previousDiagnostic.answers.map((a) => ({
+            areaKey: a.areaKey,
+            questionId: a.questionId,
+            score: a.score,
+          }))
+        );
+        evolutionNarrative = await generateMaturityEvolution(
+          diagnostic.company.name,
+          { date: previousDiagnostic.createdAt, report: previousReport },
+          { date: diagnostic.createdAt, report }
+        );
+      }
     }
 
     await prisma.diagnostic.update({
       where: { id: diagnosticId },
-      data: { status: "concluido", aiNarrative },
+      data: { status: "concluido", aiNarrative, evolutionNarrative },
     });
     redirect(`/diagnostico/${diagnosticId}/relatorio`);
   }

@@ -1,6 +1,7 @@
 import { login } from "@/app/actions-auth";
 import { MOCK_USERS } from "@/lib/auth-users";
 import { Card } from "@/app/components/Card";
+import { SubmitButton } from "@/app/components/SubmitButton";
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Administrador",
@@ -53,12 +54,12 @@ export default async function LoginPage({
                 className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition-shadow"
               />
             </label>
-            <button
-              type="submit"
+            <SubmitButton
+              pendingText="Entrando..."
               className="w-full rounded-lg bg-blue-700 text-white font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
             >
               Entrar
-            </button>
+            </SubmitButton>
           </form>
         </Card>
 
@@ -80,12 +81,12 @@ export default async function LoginPage({
                   <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
                   <p className="text-xs text-slate-500 truncate">{u.title}</p>
                 </div>
-                <button
-                  type="submit"
+                <SubmitButton
+                  pendingText="Entrando..."
                   className="shrink-0 rounded-md border border-slate-300 text-xs font-semibold px-2.5 py-1.5 hover:bg-slate-100 transition-colors whitespace-nowrap"
                 >
                   Entrar como {ROLE_LABEL[u.role]}
-                </button>
+                </SubmitButton>
               </form>
             ))}
           </div>

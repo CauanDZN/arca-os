@@ -11,24 +11,26 @@ datasource db {
 }
 
 model Company {
-  id               String          @id @default(cuid())
-  name             String
-  segment          String
-  marketAge        String
-  employees        String
-  avgRevenue       String
-  margin           String
-  activeClients    String
-  productsServices String
-  cities           String
-  painPoints       String
-  objectives       String // JSON-encoded array of selected objectives
-  createdAt        DateTime        @default(now())
-  diagnostics      Diagnostic[]
-  documents        Document[]
-  meetingNotes     MeetingNote[]
-  kpiEntries       KpiEntry[]
-  kpiSuggestions   KpiSuggestion[]
+  id                          String          @id @default(cuid())
+  name                        String
+  segment                     String
+  marketAge                   String
+  employees                   String
+  avgRevenue                  String
+  margin                      String
+  activeClients               String
+  productsServices            String
+  cities                      String
+  painPoints                  String
+  objectives                  String // JSON-encoded array of selected objectives
+  createdAt                   DateTime        @default(now())
+  diagnostics                 Diagnostic[]
+  documents                   Document[]
+  meetingNotes                MeetingNote[]
+  kpiEntries                  KpiEntry[]
+  kpiSuggestions              KpiSuggestion[]
+  performanceInsight          String? // Agente de Performance por Área — cache manual, botão "Gerar/Atualizar"
+  performanceInsightUpdatedAt DateTime?
 }
 
 model KpiEntry {
@@ -61,18 +63,21 @@ model KpiSuggestion {
 }
 
 model Diagnostic {
-  id               String            @id @default(cuid())
-  companyId        String
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  status           String            @default("em_andamento") // em_andamento | concluido | em_execucao
-  aiNarrative      String? // JSON: { executiveSummary, areaInsights: [{ areaKey, causaRaiz, recomendacao }] }
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  answers          Answer[]
-  tasks            Task[]
-  verticalInsights VerticalInsight[]
-  sprints          Sprint[]
-  epics            Epic[]
+  id                    String            @id @default(cuid())
+  companyId             String
+  company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status                String            @default("em_andamento") // em_andamento | concluido | em_execucao
+  aiNarrative           String? // JSON: { executiveSummary, areaInsights: [{ areaKey, causaRaiz, recomendacao }] }
+  evolutionNarrative    String? // Agente de Evolução de Maturidade — gerado uma vez na conclusão, se houver diagnóstico anterior
+  sprintReportContent   String? // Agente de Relatório de Sprint — cache manual, botão "Gerar/Atualizar"
+  sprintReportUpdatedAt DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  answers               Answer[]
+  tasks                 Task[]
+  verticalInsights      VerticalInsight[]
+  sprints               Sprint[]
+  epics                 Epic[]
 }
 
 model VerticalInsight {

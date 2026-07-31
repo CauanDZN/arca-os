@@ -5,6 +5,7 @@ import { AREAS } from "@/lib/areas";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import { DocumentIcon, EmptyBoxIcon } from "@/app/components/icons";
 
 function formatSize(bytes: number): string {
@@ -69,12 +70,12 @@ export default async function DocumentosPage({
                 className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm bg-white"
               />
             </label>
-            <button
-              type="submit"
+            <SubmitButton
+              pendingText="Enviando e lendo com IA..."
               className="rounded-lg bg-blue-700 text-white font-semibold px-5 py-2 hover:bg-blue-800 transition-colors whitespace-nowrap"
             >
               Enviar
-            </button>
+            </SubmitButton>
           </form>
         </Card>
 
@@ -112,12 +113,12 @@ export default async function DocumentosPage({
                           />
                         )}
                         <form action={deleteDocument.bind(null, id, doc.id)}>
-                          <button
-                            type="submit"
-                            className="text-xs text-red-600 hover:underline whitespace-nowrap"
+                          <SubmitButton
+                            pendingText="Removendo..."
+                            className="text-xs text-red-600 hover:underline whitespace-nowrap disabled:no-underline"
                           >
                             Remover
-                          </button>
+                          </SubmitButton>
                         </form>
                       </div>
                     </li>
