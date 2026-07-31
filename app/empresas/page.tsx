@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { EmptyBoxIcon } from "@/app/components/icons";
+import { Card } from "@/app/components/Card";
+import { BuildingIcon, EmptyBoxIcon } from "@/app/components/icons";
 
 export default async function EmpresasPage() {
   const companies = await prisma.company.findMany({
@@ -11,20 +12,26 @@ export default async function EmpresasPage() {
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <div className="mx-auto max-w-4xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-700 uppercase mb-1">
-              Cockpit ArcaOS
-            </p>
-            <h1 className="text-2xl font-bold text-slate-900">Empresas</h1>
+        <Card>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+                <BuildingIcon className="w-4 h-4" />
+                ArcaOS
+              </p>
+              <h1 className="text-2xl font-bold text-slate-900">Empresas</h1>
+              <p className="text-slate-600 mt-1">
+                Todas as empresas com diagnóstico em andamento ou concluído na plataforma.
+              </p>
+            </div>
+            <Link
+              href="/diagnostico/novo"
+              className="shrink-0 rounded-lg bg-blue-700 text-white font-semibold px-4 py-2 text-sm hover:bg-blue-800 transition-colors"
+            >
+              + Novo diagnóstico
+            </Link>
           </div>
-          <Link
-            href="/diagnostico/novo"
-            className="rounded-lg bg-blue-700 text-white font-semibold px-4 py-2 text-sm hover:bg-blue-800 transition-colors"
-          >
-            + Novo diagnóstico
-          </Link>
-        </div>
+        </Card>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
           {companies.length === 0 ? (

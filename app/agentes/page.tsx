@@ -147,10 +147,6 @@ export default function AgentesPage() {
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <div className="mx-auto max-w-4xl space-y-6">
-        <Link href="/empresas" className="text-sm text-slate-500 hover:text-slate-800">
-          ← Empresas
-        </Link>
-
         <Card>
           <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             <SparklesIcon className="w-4 h-4" />

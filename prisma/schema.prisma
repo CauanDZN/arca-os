@@ -31,6 +31,17 @@ model Company {
   kpiSuggestions              KpiSuggestion[]
   performanceInsight          String? // Agente de Performance por Área — cache manual, botão "Gerar/Atualizar"
   performanceInsightUpdatedAt DateTime?
+  webhookToken                String?         @unique // gerado sob demanda; null = webhook desativado pra essa empresa
+  webhookEvents               WebhookEvent[]
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source     String   @default("") // rótulo livre — ?source=... na URL, ou o header User-Agent de quem chamou
+  payload    String // corpo bruto recebido (texto ou JSON), truncado se muito grande
+  receivedAt DateTime @default(now())
 }
 
 model KpiEntry {

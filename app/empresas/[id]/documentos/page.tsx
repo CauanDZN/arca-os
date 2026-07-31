@@ -3,10 +3,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AREAS } from "@/lib/areas";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
+import { generateWebhookToken, revokeWebhookToken, deleteWebhookEvent } from "@/app/actions-webhooks";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { SubmitButton } from "@/app/components/SubmitButton";
-import { DocumentIcon, EmptyBoxIcon } from "@/app/components/icons";
+import { WebhookUrlBox } from "@/app/components/WebhookUrlBox";
+import { DocumentIcon, EmptyBoxIcon, PlugIcon } from "@/app/components/icons";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -23,7 +25,10 @@ export default async function DocumentosPage({
 
   const company = await prisma.company.findUnique({
     where: { id },
-    include: { documents: { orderBy: { createdAt: "desc" } } },
+    include: {
+      documents: { orderBy: { createdAt: "desc" } },
+      webhookEvents: { orderBy: { receivedAt: "desc" }, take: 20 },
+    },
   });
   if (!company) notFound();
 
@@ -77,6 +82,71 @@ export default async function DocumentosPage({
               Enviar
             </SubmitButton>
           </form>
+        </Card>
+
+        <Card>
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+            <PlugIcon className="w-4 h-4" />
+            Webhook
+          </p>
+          <p className="text-slate-600 mb-4">
+            Em vez de uma integração fechada com um ERP ou CRM específico, aponte o webhook do seu
+            sistema pra essa URL — qualquer evento recebido fica registrado aqui, pra consulta ou
+            leitura futura pelos agentes de IA.
+          </p>
+
+          {company.webhookToken ? (
+            <div className="space-y-3">
+              <WebhookUrlBox path={`/api/webhooks/${id}?token=${company.webhookToken}`} />
+              <form action={revokeWebhookToken.bind(null, id)}>
+                <SubmitButton
+                  pendingText="Revogando..."
+                  className="text-xs text-red-600 hover:underline disabled:no-underline"
+                >
+                  Revogar URL
+                </SubmitButton>
+              </form>
+            </div>
+          ) : (
+            <form action={generateWebhookToken.bind(null, id)}>
+              <SubmitButton
+                pendingText="Gerando..."
+                className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+              >
+                Gerar URL de webhook
+              </SubmitButton>
+            </form>
+          )}
+
+          {company.webhookEvents.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                Últimos eventos recebidos
+              </p>
+              {company.webhookEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-400">
+                      {new Date(event.receivedAt).toLocaleString("pt-BR")}
+                      {event.source && ` · ${event.source}`}
+                    </p>
+                    <p className="text-xs font-mono text-slate-700 truncate">{event.payload}</p>
+                  </div>
+                  <form action={deleteWebhookEvent.bind(null, id, event.id)} className="shrink-0">
+                    <SubmitButton
+                      pendingText="Removendo..."
+                      className="text-xs text-red-600 hover:underline disabled:no-underline"
+                    >
+                      Remover
+                    </SubmitButton>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         <div className="space-y-4">

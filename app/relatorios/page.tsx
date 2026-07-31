@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
 import { auditDataQuality } from "@/lib/data-quality";
+import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { EmptyBoxIcon, DocumentIcon, SparklesIcon } from "@/app/components/icons";
 
@@ -41,20 +42,20 @@ export default async function RelatoriosPage() {
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <div className="mx-auto max-w-4xl space-y-6">
-        <div>
+        <Card>
           <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             <DocumentIcon className="w-4 h-4" />
             ArcaOS
           </p>
-          <h1 className="text-2xl font-bold text-slate-900">Relatórios</h1>
-          <p className="text-slate-600 mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">Relatórios</h1>
+          <p className="text-slate-600">
             Todos os diagnósticos concluídos, com acesso direto ao relatório executivo e ao
             projeto de execução.
           </p>
-        </div>
+        </Card>
 
         {qualityIssues.length > 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <Card className="border-amber-200 bg-amber-50/60 p-4">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
               <SparklesIcon className="w-3.5 h-3.5" />
               Agente de Qualidade de Dados
@@ -66,7 +67,7 @@ export default async function RelatoriosPage() {
                 </p>
               ))}
             </div>
-          </div>
+          </Card>
         )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">

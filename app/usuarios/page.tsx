@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { MOCK_USERS } from "@/lib/auth-users";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
+import { UsersIcon } from "@/app/components/icons";
 import type { BadgeTone } from "@/lib/badge-tones";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -23,13 +24,14 @@ export default async function UsuariosPage() {
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <Card>
-          <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+            <UsersIcon className="w-4 h-4" />
             Administração
           </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Usuários</h1>
-          <p className="text-slate-600 text-sm">
+          <p className="text-slate-600">
             Login mockado — esta lista é estática (<code>lib/auth-users.ts</code>), não persistida no
             banco. Não há criação, edição ou remoção de usuários nesta versão; cada um mapeia pra um
             cargo da estrutura organizacional do plano da Arca.

@@ -63,6 +63,8 @@ import {
   deleteEpic,
 } from "@/app/actions-project";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
+import { generateWebhookToken, revokeWebhookToken, deleteWebhookEvent } from "@/app/actions-webhooks";
+import { POST as receiveWebhook } from "@/app/api/webhooks/[companyId]/route";
 import { generateVerticalInsightAction } from "@/app/actions-vertical";
 import { createMeetingNote, deleteMeetingNote } from "@/app/actions-meetings";
 import { upsertKpiEntry, deleteKpiEntry, applyKpiSuggestion, rejectKpiSuggestion } from "@/app/actions-kpis";
@@ -428,6 +430,55 @@ describe("Data Room (upload/download)", () => {
 
     // don't leave test artifacts in the real project's uploads/ directory
     await fs.rm(path.join(process.cwd(), "uploads", companyId), { recursive: true, force: true });
+  });
+});
+
+describe("Webhook (generateWebhookToken/revokeWebhookToken + rota de recebimento)", () => {
+  it("gera um token, aceita evento com o token correto e rejeita token errado ou ausente", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Webhook");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+    const companyId = diagnostic.companyId;
+
+    const redirectUrl = await expectRedirect(generateWebhookToken(companyId));
+    expect(redirectUrl).toBe(`/empresas/${companyId}/documentos`);
+
+    const company = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
+    expect(company.webhookToken).toMatch(/^[0-9a-f]{48}$/);
+    const token = company.webhookToken!;
+
+    const wrongTokenReq = new Request(`http://localhost/api/webhooks/${companyId}?token=errado`, {
+      method: "POST",
+      body: JSON.stringify({ hello: "world" }),
+    });
+    const wrongTokenRes = await receiveWebhook(wrongTokenReq, { params: Promise.resolve({ companyId }) });
+    expect(wrongTokenRes.status).toBe(404);
+    expect(await prisma.webhookEvent.count({ where: { companyId } })).toBe(0);
+
+    const validReq = new Request(
+      `http://localhost/api/webhooks/${companyId}?token=${token}&source=erp-teste`,
+      { method: "POST", body: JSON.stringify({ evento: "pedido_criado", valor: 1200 }) }
+    );
+    const validRes = await receiveWebhook(validReq, { params: Promise.resolve({ companyId }) });
+    expect(validRes.status).toBe(200);
+
+    const event = await prisma.webhookEvent.findFirstOrThrow({ where: { companyId } });
+    expect(event.source).toBe("erp-teste");
+    expect(JSON.parse(event.payload)).toMatchObject({ evento: "pedido_criado", valor: 1200 });
+
+    await expectRedirect(deleteWebhookEvent(companyId, event.id));
+    expect(await prisma.webhookEvent.count({ where: { companyId } })).toBe(0);
+
+    await expectRedirect(revokeWebhookToken(companyId));
+    const revoked = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
+    expect(revoked.webhookToken).toBeNull();
+
+    // token revoked — the same request that worked before must now 404
+    const afterRevokeReq = new Request(`http://localhost/api/webhooks/${companyId}?token=${token}`, {
+      method: "POST",
+      body: "{}",
+    });
+    const afterRevokeRes = await receiveWebhook(afterRevokeReq, { params: Promise.resolve({ companyId }) });
+    expect(afterRevokeRes.status).toBe(404);
   });
 });
 

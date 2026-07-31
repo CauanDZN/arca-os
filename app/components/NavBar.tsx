@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { logout } from "@/app/actions-auth";
 import type { Session } from "@/lib/session";
 import { SubmitButton } from "@/app/components/SubmitButton";
-import { BuildingIcon, DocumentIcon, SparklesIcon, PlugIcon } from "@/app/components/icons";
+import { BuildingIcon, DocumentIcon, SparklesIcon, PlugIcon, UsersIcon } from "@/app/components/icons";
 
 const LINKS = [
   { href: "/empresas", label: "Empresas", icon: BuildingIcon, roles: ["admin", "consultor"] },
@@ -59,7 +59,7 @@ export function NavBar({ session }: { session: Session | null }) {
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
-                <BuildingIcon className="w-4 h-4" />
+                <UsersIcon className="w-4 h-4" />
                 Usuários
               </Link>
             )}

@@ -13,6 +13,8 @@ type Integration = {
   status: IntegrationStatus;
   /** Only for "workaround" — the manual path that already works today. */
   workaround?: string;
+  /** Overrides the default CTA label for "disponivel"/"workaround" rows. */
+  ctaLabel?: string;
 };
 
 const STATUS_LABEL: Record<IntegrationStatus, string> = {
@@ -29,19 +31,30 @@ const STATUS_TONE: Record<IntegrationStatus, BadgeTone> = {
 
 const INTEGRATIONS: Integration[] = [
   {
+    name: "Webhook",
+    description:
+      "URL própria por empresa pra receber eventos de qualquer ERP, CRM ou automação — sem precisar de um conector específico pra cada sistema.",
+    category: "Sistemas de gestão",
+    status: "disponivel",
+    workaround:
+      "Gere a URL na página de Data Room da empresa e aponte o webhook do seu ERP/CRM pra ela. Cada evento recebido fica registrado e disponível pra consulta.",
+    ctaLabel: "Gerar URL",
+  },
+  {
     name: "ERP",
     description: "Sincronização de financeiro, estoque e faturamento.",
     category: "Sistemas de gestão",
     status: "workaround",
     workaround:
-      "Exporte um relatório de financeiro/estoque em PDF ou CSV e envie pelo Data Room — o Classificador e o Agente de Diagnóstico Vertical já leem.",
+      "Sem conector dedicado pra um ERP específico, mas o ERP pode apontar seu webhook de eventos pra URL da empresa (veja \"Webhook\" acima) — ou exporte um relatório em PDF/CSV e envie pelo Data Room, que o Classificador e o Agente de Diagnóstico Vertical já leem.",
   },
   {
     name: "CRM",
     description: "Importação de funil comercial, leads e oportunidades.",
     category: "Comercial",
     status: "workaround",
-    workaround: "Exporte um relatório de funil/leads em PDF ou CSV e envie pelo Data Room, categoria Comercial.",
+    workaround:
+      "Mesma ideia do ERP: aponte o webhook do CRM pra URL da empresa, ou exporte um relatório de funil/leads em PDF ou CSV e envie pelo Data Room, categoria Comercial.",
   },
   {
     name: "Bancos / Open Finance",
@@ -91,10 +104,6 @@ export default function IntegracoesPage() {
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <div className="mx-auto max-w-4xl space-y-6">
-        <Link href="/empresas" className="text-sm text-slate-500 hover:text-slate-800">
-          ← Empresas
-        </Link>
-
         <Card>
           <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             <PlugIcon className="w-4 h-4" />
@@ -103,13 +112,15 @@ export default function IntegracoesPage() {
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Integrações</h1>
           <p className="text-slate-600">
             A visão de longo prazo é a Arca ser uma camada inteligente acima dos sistemas do cliente.
-            Nenhuma dessas integrações tem sincronização automática nesta versão — mas várias já
+            Nenhuma dessas integrações tem um conector dedicado nesta versão — mas duas coisas já
             funcionam hoje na prática: suba o documento no{" "}
             <Link href="/empresas" className="text-blue-700 hover:underline">
               Data Room
             </Link>{" "}
             e os agentes de classificação, diagnóstico vertical e extração de indicadores já leem o
-            conteúdo, sem precisar de API nem OAuth.
+            conteúdo sem precisar de API nem OAuth; ou aponte o webhook de eventos do seu sistema pra
+            uma URL própria da empresa, sem depender de um conector específico pra cada ERP/CRM do
+            mercado.
           </p>
         </Card>
 
@@ -146,14 +157,14 @@ export default function IntegracoesPage() {
                         href="/empresas"
                         className="rounded-lg bg-blue-700 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-800 transition-colors"
                       >
-                        Ver exportação
+                        {integration.ctaLabel ?? "Ver exportação"}
                       </Link>
                     ) : integration.status === "workaround" ? (
                       <Link
                         href="/empresas"
                         className="rounded-lg border border-blue-300 text-blue-700 px-3 py-1.5 text-xs font-semibold hover:bg-blue-50 transition-colors"
                       >
-                        Ir pro Data Room
+                        {integration.ctaLabel ?? "Ir pro Data Room"}
                       </Link>
                     ) : (
                       <button
