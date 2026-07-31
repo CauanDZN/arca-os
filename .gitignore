@@ -53,3 +53,6 @@ skills-lock.json
 *.db-journal
 /uploads
 
+# PDF de teste gerado por scripts/generate-dre-pdf.tsx (usado em várias empresas)
+/teste-dataroom-dre.pdf
+

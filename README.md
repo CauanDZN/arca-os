@@ -136,7 +136,8 @@ lib/
   prisma.ts                               Cliente Prisma singleton
   session.ts (+ .test.ts)                 Tipo Session + encode/decode do cookie (puro, Edge-safe)
   auth.ts                                 getSession/setSessionCookie/clearSessionCookie (Node only)
-  auth-users.ts                           Lista estática de usuários mockados
+  actions-users.ts                        CRUD de usuários (admin): createUser, updateUserRole, deleteUser
+  actions-empresas.ts                     deleteCompany — exclui empresa + blobs + cascade
   access.ts                               assertCompanyAccess — trava o papel "cliente" na própria empresa
 
 prisma/schema.prisma                      Modelos: Company, Diagnostic, Answer, Document, Task
@@ -186,10 +187,12 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 Implementado a pedido — não é autenticação de produção, mas a lógica de controle de acesso (quem
 pode ver o quê) é real, não decorativa.
 
-- **Usuários**: lista estática em `lib/auth-users.ts` (5 usuários, não persistidos no banco),
-  cobrindo 3 papéis — `admin`, `consultor` e `cliente` — mapeados pra cargos da visão organizacional
-  do plano da Arca (CEO/Head BTO, Consultor Líder, Sponsor do Cliente etc.). A tela `/login` lista
-  todos com um botão de "entrar como" pra facilitar teste.
+- **Usuários**: persistidos no banco (modelo `User`, seedado pela migration `add_users` com
+  admins/consultores/clientes — Cauan, Cícero, Camila, Marcos, Beatriz, Roberto etc.), cobrindo 3
+  papéis — `admin`, `consultor` e `cliente` — mapeados pra cargos da visão organizacional do plano
+  da Arca (CEO/Head BTO, Consultor Líder, Sponsor do Cliente etc.). A tela `/login` lista todos com
+  um botão de "entrar como" pra facilitar teste, e `/usuarios` (admin) permite criar, mudar papel e
+  remover usuários.
 - **Sessão**: cookie httpOnly com um JSON em base64 — **não é assinado nem criptografado**. Prova
   as regras de roteamento, não protege dado real contra um usuário que edite o próprio cookie.
 - **Regras**: `cliente` só acessa a empresa vinculada a ele (empresa, diagnósticos, Data Room, atas,

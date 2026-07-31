@@ -85,6 +85,8 @@ import { generateVerticalInsightAction } from "@/app/actions-vertical";
 import { createMeetingNote, deleteMeetingNote } from "@/app/actions-meetings";
 import { upsertKpiEntry, deleteKpiEntry, applyKpiSuggestion, rejectKpiSuggestion } from "@/app/actions-kpis";
 import { login, logout } from "@/app/actions-auth";
+import { createUser, updateUserRole, deleteUser } from "@/app/actions-users";
+import { deleteCompany } from "@/app/actions-empresas";
 
 async function expectRedirect(promise: Promise<unknown>): Promise<string> {
   try {
@@ -936,5 +938,116 @@ describe("assertCompanyAccess (cliente role scoping)", () => {
     } satisfies Session);
 
     await expectNotFound(createDiagnostic(minimalCompanyForm("Empresa Bloqueada Para Cliente")));
+  });
+});
+
+describe("Gestão de usuários (createUser/updateUserRole/deleteUser)", () => {
+  it("cria um usuário, muda o papel e o remove", async () => {
+    const fd = new FormData();
+    fd.set("name", "Nova Consultora");
+    fd.set("email", "nova@arcaconsulting.com");
+    fd.set("password", "senha123");
+    fd.set("role", "consultor");
+    fd.set("title", "Consultora Líder");
+    const redirectUrl = await expectRedirect(createUser(fd));
+    expect(redirectUrl).toBe("/usuarios?sucesso=criado");
+
+    const user = await prisma.user.findFirstOrThrow({ where: { email: "nova@arcaconsulting.com" } });
+    expect(user.role).toBe("consultor");
+    expect(user.title).toBe("Consultora Líder");
+
+    const roleFd = new FormData();
+    roleFd.set("role", "admin");
+    await expectRedirect(updateUserRole(user.id, roleFd));
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role).toBe("admin");
+
+    await expectRedirect(deleteUser(user.id));
+    expect(await prisma.user.findUnique({ where: { id: user.id } })).toBeNull();
+  });
+
+  it("rejeita um e-mail que já existe", async () => {
+    const fd = new FormData();
+    fd.set("name", "Duplicado");
+    fd.set("email", "cauan@arcaconsulting.com"); // já seedado pela migration add_users
+    fd.set("password", "senha123");
+    fd.set("role", "consultor");
+    fd.set("title", "X");
+    const redirectUrl = await expectRedirect(createUser(fd));
+    expect(redirectUrl).toBe("/usuarios?error=email-existe");
+  });
+
+  // roda por último: derruba os admins seedados, então não pode rodar antes
+  // dos testes de login que dependem deles
+  it("não deixa excluir o último admin restante", async () => {
+    const admins = await prisma.user.findMany({ where: { role: "admin" }, orderBy: { email: "asc" } });
+    expect(admins.length).toBeGreaterThanOrEqual(2);
+
+    // derruba todos os admins, deixando só um
+    for (const admin of admins.slice(1)) {
+      await expectRedirect(deleteUser(admin.id));
+    }
+
+    const last = admins[0];
+    const blocked = await expectRedirect(deleteUser(last.id));
+    expect(blocked).toBe("/usuarios?error=ultimo-admin");
+    expect(await prisma.user.findUnique({ where: { id: last.id } })).not.toBeNull();
+  });
+
+  it("bloqueia um cliente de gerenciar usuários", async () => {
+    mockGetSession.mockResolvedValue({
+      userId: "cliente-test",
+      name: "Cliente Teste",
+      email: "cliente@test.com",
+      role: "cliente",
+      title: "Sponsor",
+      companyId: "empresa-de-outro-cliente",
+    } satisfies Session);
+
+    await expectNotFound(createUser(new FormData()));
+    await expectNotFound(deleteUser("u1"));
+  });
+});
+
+describe("deleteCompany (zona de perigo)", () => {
+  it("exclui a empresa, os blobs e toda a árvore de dados de uma vez", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Excluir");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+    const companyId = diagnostic.companyId;
+    await completeAllAreas(diagnosticId, 0);
+    await expectRedirect(approveActionPlan(diagnosticId));
+
+    mockBlobPut.mockResolvedValue({ url: `https://blob.example.com/${companyId}/arquivo.txt` });
+    const file = new File(["conteúdo"], "arquivo.txt", { type: "text/plain" });
+    const fd = new FormData();
+    fd.set("category", "geral");
+    fd.set("file", file);
+    await expectRedirect(uploadDocument(companyId, fd));
+
+    const redirectUrl = await expectRedirect(deleteCompany(companyId));
+    expect(redirectUrl).toBe("/empresas");
+
+    expect(mockBlobDel).toHaveBeenCalled();
+    expect(await prisma.company.findUnique({ where: { id: companyId } })).toBeNull();
+    expect(await prisma.diagnostic.count({ where: { companyId } })).toBe(0);
+    expect(await prisma.answer.count({ where: { diagnosticId } })).toBe(0);
+    expect(await prisma.task.count({ where: { diagnosticId } })).toBe(0);
+    expect(await prisma.document.count({ where: { companyId } })).toBe(0);
+  });
+
+  it("bloqueia um cliente de excluir até a própria empresa", async () => {
+    const diagnosticId = await createTestCompany("Empresa Integração Excluir Cliente");
+    const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
+
+    mockGetSession.mockResolvedValue({
+      userId: "cliente-test",
+      name: "Cliente Teste",
+      email: "cliente@test.com",
+      role: "cliente",
+      title: "Sponsor",
+      companyId: diagnostic.companyId,
+    } satisfies Session);
+
+    await expectNotFound(deleteCompany(diagnostic.companyId));
+    expect(await prisma.company.findUnique({ where: { id: diagnostic.companyId } })).not.toBeNull();
   });
 });

@@ -114,10 +114,12 @@ MVP inicial de propósito. Três peças:
   implementação real usaria sessão assinada (`next-auth`, `iron-session`).
 - **`lib/auth.ts`** — só roda em Node (usa `next/headers`): `getSession`/`setSessionCookie`/
   `clearSessionCookie`.
-- **`lib/auth-users.ts`** — `MOCK_USERS`, uma lista estática (não persistida no banco) com 5
-  usuários cobrindo os 3 papéis (`admin`, `consultor`, `cliente`), cada um com um `title` que mapeia
-  pro cargo real da visão organizacional do plano da Arca (seção 16 do pitch do Cícero). Senha em
-  texto puro de propósito — não é um cofre de credenciais real.
+- **Modelo `User` no banco** — os usuários vivem em Postgres (migration `add_users`, que também
+  semeia os 5 usuários que antes eram `MOCK_USERS` em `lib/auth-users.ts` — arquivo removido). O
+  login consulta `prisma.user`; a página `/usuarios` (só admin) cria, troca o cargo e exclui
+  usuários via `app/actions-users.ts`. `createUser`/`updateUserRole`/`deleteUser` têm guards:
+  validação via `userSchema`, e-mail único, não se auto-excluir e não excluir o último admin. Senha
+  em texto puro de propósito — não é um cofre de credenciais real.
 
 **Regras de acesso**: `proxy.ts` bloqueia rotas sem sessão e redireciona `cliente` pra longe de
 `/empresas`, `/relatorios`, `/diagnostico/novo` e de qualquer `/empresas/[id]` que não seja o dele —

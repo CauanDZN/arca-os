@@ -6,8 +6,11 @@ import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
 import type { MeetingMinutes } from "@/lib/ai";
 import { findAtRiskTasks } from "@/lib/pmo";
+import { getSession } from "@/lib/auth";
+import { deleteCompany } from "@/app/actions-empresas";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
+import { ConfirmButton } from "@/app/components/ConfirmButton";
 import { ScoreBar } from "@/app/components/ScoreBar";
 import {
   FolderIcon,
@@ -25,6 +28,8 @@ export default async function EmpresaDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+
+  const session = await getSession();
 
   const company = await prisma.company.findUnique({
     where: { id },
@@ -322,6 +327,26 @@ export default async function EmpresaDetailPage({
             )}
           </Card>
         </div>
+
+        {session?.role === "admin" && (
+          <Card>
+            <h2 className="text-xl font-bold text-red-800 mb-2">Zona de perigo</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Exclui <strong>{company.name}</strong> e todos os dados vinculados de uma vez:
+              diagnósticos (respostas, plano de ação, sprints, épicos), Data Room (documentos e
+              blobs), atas, indicadores e webhooks. Esta ação não pode ser desfeita.
+            </p>
+            <form action={deleteCompany.bind(null, id)}>
+              <ConfirmButton
+                confirmText={`Excluir ${company.name} e todos os dados vinculados? Esta ação não pode ser desfeita.`}
+                pendingText="Excluindo..."
+                className="rounded-lg bg-red-700 text-white text-sm font-semibold px-4 py-2 hover:bg-red-800 transition-colors"
+              >
+                Excluir empresa
+              </ConfirmButton>
+            </form>
+          </Card>
+        )}
       </div>
     </main>
   );

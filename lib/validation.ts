@@ -99,3 +99,19 @@ export const kpiEntrySchema = z.object({
   value: z.coerce.number(),
   target: z.coerce.number().optional(),
 });
+
+export const USER_ROLES = ["admin", "consultor", "cliente"] as const;
+
+export const userSchema = z.object({
+  name: z.string().trim().min(1, "Informe o nome.").max(120),
+  email: z.string().trim().email("E-mail inválido").max(160),
+  password: z.string().min(6, "A senha deve ter ao menos 6 caracteres.").max(120),
+  role: z.enum(USER_ROLES),
+  title: z.string().trim().max(120).default(""),
+  companyName: z
+    .string()
+    .trim()
+    .max(120)
+    .default("")
+    .transform((v) => (v === "" ? null : v)),
+});

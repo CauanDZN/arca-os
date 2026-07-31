@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { MOCK_USERS } from "@/lib/auth-users";
+import type { Role } from "@/lib/session";
 import { setSessionCookie, clearSessionCookie } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
@@ -9,8 +9,10 @@ export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
-  const user = MOCK_USERS.find((u) => u.email.toLowerCase() === email && u.password === password);
-  if (!user) {
+  // Users live in the DB (seeded by the add_users migration, managed via the
+  // /usuarios page) — no more static list in lib/auth-users.ts.
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || user.password !== password) {
     redirect("/login?error=credenciais");
   }
 
@@ -27,7 +29,7 @@ export async function login(formData: FormData) {
     userId: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: user.role as Role,
     title: user.title,
     companyId,
   });
