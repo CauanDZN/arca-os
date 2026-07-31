@@ -857,9 +857,21 @@ describe("login/logout", () => {
   });
 
   it("só deixa cliente logar quando o usuário está vinculado a uma empresa real", async () => {
+    // Os usuários do seed são só Cauan e Cícero (migration remove_seed_users).
+    // Cria aqui um cliente "sem vínculo" para o cenário.
+    await prisma.user.create({
+      data: {
+        id: "cliente-teste",
+        name: "Cliente Teste",
+        email: "cliente-teste@arcaconsulting.com",
+        password: "cliente123",
+        role: "cliente",
+        title: "Sponsor do Cliente",
+      },
+    });
     const clientFd = () => {
       const fd = new FormData();
-      fd.set("email", "roberto@oticavisaoclara.com.br");
+      fd.set("email", "cliente-teste@arcaconsulting.com");
       fd.set("password", "cliente123");
       return fd;
     };
@@ -877,12 +889,12 @@ describe("login/logout", () => {
     const stillError = await expectRedirect(login(clientFd()));
     expect(stillError).toBe("/login?error=empresa");
 
-    const roberto = await prisma.user.findUniqueOrThrow({ where: { email: "roberto@oticavisaoclara.com.br" } });
+    const cliente = await prisma.user.findUniqueOrThrow({ where: { email: "cliente-teste@arcaconsulting.com" } });
     const roleFd = new FormData();
     roleFd.set("role", "cliente");
     roleFd.set("companyId", companyId);
-    await expectRedirect(updateUserRole(roberto.id, roleFd));
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: roberto.id } })).companyId).toBe(companyId);
+    await expectRedirect(updateUserRole(cliente.id, roleFd));
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: cliente.id } })).companyId).toBe(companyId);
 
     const successRedirect = await expectRedirect(login(clientFd()));
     expect(successRedirect).toBe(`/empresas/${companyId}`);

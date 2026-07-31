@@ -151,14 +151,17 @@ MVP inicial de propósito. Três peças:
   implementação real usaria sessão assinada (`next-auth`, `iron-session`).
 - **`lib/auth.ts`** — só roda em Node (usa `next/headers`): `getSession`/`setSessionCookie`/
   `clearSessionCookie`.
-- **Modelo `User` no banco** — os usuários vivem em Postgres (migration `add_users`, que semeia
-  os 6 usuários que antes eram `MOCK_USERS` em `lib/auth-users.ts` — arquivo removido; inclui
-  Cícero Pereira, admin). O login consulta `prisma.user`; a página `/usuarios` (só admin) cria,
-  troca o cargo/empresa e exclui usuários via `app/actions-users.ts`. Clientes são vinculados a
-  uma empresa **real** por `User.companyId` (FK, migration `add_user_company_relation`) — a tela
-  usa um `<select>` de empresas e o login usa o `companyId` direto; sem vínculo o login cai em
-  `/login?error=empresa`. `createUser`/`updateUserRole`/`deleteUser` têm guards: validação via
-  `userSchema`, e-mail único, cliente exige empresa (`empresa-obrigatoria`/`empresa-invalida`),
+- **Modelo `User` no banco** — os usuários vivem em Postgres (migration `add_users`, que semeia os
+  usuários que antes eram `MOCK_USERS` em `lib/auth-users.ts` — arquivo removido). **Por padrão só
+  existem Cauan e Cícero (ambos `admin`)**; a migration `remove_seed_users` apaga Camila, Marcos,
+  Beatriz e Roberto de qualquer banco — ela é idempotente, então vale para banco novo e para bancos
+  já existentes (o seed da `add_users` não foi editado porque já está aplicado; editar migration
+  aplicada gera risco de checksum no Prisma). O login consulta `prisma.user`; a página `/usuarios`
+  (só admin) cria, troca o cargo/empresa e exclui usuários via `app/actions-users.ts`. Clientes são
+  vinculados a uma empresa **real** por `User.companyId` (FK, migration `add_user_company_relation`)
+  — a tela usa um `<select>` de empresas e o login usa o `companyId` direto; sem vínculo o login
+  cai em `/login?error=empresa`. `createUser`/`updateUserRole`/`deleteUser` têm guards: validação
+  via `userSchema`, e-mail único, cliente exige empresa (`empresa-obrigatoria`/`empresa-invalida`),
   não se auto-excluir e não excluir o último admin. Senha em texto puro de propósito — não é um
   cofre de credenciais real.
 
@@ -187,12 +190,6 @@ sem lib de charts.
 
 - **Deploy em produção**: nunca executar deploy real (Vercel etc.) sem o usuário presente e
   confirmando — toca conta/credenciais de hospedagem dele.
-- **Aplicar a migration `20260731220000_add_portal_and_monthly_report`**: foi criada localmente mas
-  **ainda não foi aplicada** ao Postgres de produção. A build da Vercel roda `prisma migrate deploy`
-  automaticamente, mas a aplicação local depende de `DATABASE_URL` no ambiente do shell (não está
-  no `.env`/`.env.local`), então não rodar `migrate deploy` por conta própria.
-- **`CRON_SECRET` não está definido em lugar nenhum** — precisa ser criado na Vercel para o
-  `/api/cron/mensal` funcionar (rota retorna 401 sem ele).
 - **Upload de arquivos via browser automation**: automação headless não abre o diálogo nativo do
   SO para selecionar arquivo. Para validar upload, use o teste de integração (já cobre isso) ou
   peça para o usuário testar manualmente — não force `input[type=file].value` via JS (o browser

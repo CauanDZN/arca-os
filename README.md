@@ -231,12 +231,13 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 Implementado a pedido — não é autenticação de produção, mas a lógica de controle de acesso (quem
 pode ver o quê) é real, não decorativa.
 
-- **Usuários**: persistidos no banco (modelo `User`, seedado pela migration `add_users` com
-  admins/consultores/clientes — Cauan, Cícero, Camila, Marcos, Beatriz, Roberto etc.), cobrindo 3
-  papéis — `admin`, `consultor` e `cliente` — mapeados pra cargos da visão organizacional do plano
-  da Arca (CEO/Head BTO, Consultor Líder, Sponsor do Cliente etc.). A tela `/login` lista todos com
-  um botão de "entrar como" pra facilitar teste, e `/usuarios` (admin) permite criar, mudar papel,
-  **vincular um cliente a uma empresa real** (`User.companyId`, via select de empresas) e remover
+- **Usuários**: persistidos no banco (modelo `User`, seedado pela migration `add_users` com Cauan e
+  Cícero, ambos `admin` — os demais usuários do seed inicial foram removidos pela migration
+  `remove_seed_users`), cobrindo 3 papéis — `admin`, `consultor` e `cliente` — mapeados pra cargos
+  da visão organizacional do plano da Arca (CEO/Head BTO, Consultor Líder, Sponsor do Cliente etc.).
+  A tela `/login` lista todos com um botão de "entrar como" pra facilitar teste, e `/usuarios`
+  (admin) permite criar, mudar papel, **vincular um cliente a uma empresa real** (`User.companyId`,
+  via select de empresas) e remover
   usuários. Cliente sem empresa vinculada não consegue logar.
 - **Sessão**: cookie httpOnly com um JSON em base64 — **não é assinado nem criptografado**. Prova
   as regras de roteamento, não protege dado real contra um usuário que edite o próprio cookie.
