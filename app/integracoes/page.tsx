@@ -135,6 +135,7 @@ export default function IntegracoesPage() {
         </Card>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b border-slate-200 bg-slate-50">
@@ -191,6 +192,7 @@ export default function IntegracoesPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </main>

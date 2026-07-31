@@ -171,7 +171,7 @@ export default function AgentesPage() {
                   key={agent.name}
                   className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-slate-900">{agent.name}</p>
                     <p className="text-sm text-slate-600">{agent.description}</p>
                     {agent.status === "ativo" && agent.seeItAt && (

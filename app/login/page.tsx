@@ -76,7 +76,7 @@ export default async function LoginPage({
               <form
                 key={u.id}
                 action={login}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
               >
                 <input type="hidden" name="email" value={u.email} />
                 <input type="hidden" name="password" value={u.password} />
@@ -86,7 +86,7 @@ export default async function LoginPage({
                 </div>
                 <SubmitButton
                   pendingText="Entrando..."
-                  className="shrink-0 rounded-md border border-slate-300 text-xs font-semibold px-2.5 py-1.5 hover:bg-slate-100 transition-colors whitespace-nowrap"
+                  className="shrink-0 self-start sm:self-auto rounded-md border border-slate-300 text-xs font-semibold px-2.5 py-1.5 hover:bg-slate-100 transition-colors whitespace-nowrap"
                 >
                   Entrar como {ROLE_LABEL[u.role]}
                 </SubmitButton>

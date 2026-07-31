@@ -19,7 +19,7 @@ export default function Home() {
     <main className="flex-1 relative overflow-hidden bg-slate-50">
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-[32rem] w-[48rem] rounded-full bg-blue-200/30 blur-3xl"
+        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-128 w-3xl rounded-full bg-blue-200/30 blur-3xl"
       />
 
       <div className="relative mx-auto max-w-3xl px-6 py-20 text-center">
@@ -51,15 +51,15 @@ export default function Home() {
         </div>
 
         {/* Ciclo Arca */}
-        <div className="flex items-center justify-center gap-1 sm:gap-3 mb-14 flex-wrap">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-3 mb-14">
           {CYCLE.map((step, i) => (
-            <div key={step.label} className="flex items-center gap-1 sm:gap-3">
-              <div className="flex flex-col items-center gap-2 rounded-xl bg-white border border-slate-200/80 px-4 py-3 shadow-sm">
+            <div key={step.label} className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-col items-center gap-2 rounded-xl bg-white border border-slate-200/80 px-4 py-3 shadow-sm w-full sm:w-auto">
                 <step.icon className="w-5 h-5 text-blue-700" />
                 <span className="text-xs font-semibold text-slate-700">{step.label}</span>
               </div>
               {i < CYCLE.length - 1 && (
-                <span className="text-slate-300 text-lg" aria-hidden>
+                <span className="text-slate-300 text-lg rotate-90 sm:rotate-0" aria-hidden>
                   →
                 </span>
               )}

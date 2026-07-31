@@ -187,7 +187,7 @@ export default async function PortalPage({
 
         {/* Pendências */}
         <Card id="pendencias">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
             <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900">
               <ListChecksIcon className="w-5 h-5 text-blue-700" />
               Pendências
@@ -216,7 +216,7 @@ export default async function PortalPage({
                       {task.dueDate && ` · Prazo: ${formatDate(task.dueDate)}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     {overdueIds.has(task.id) && <Badge text="Atrasada" tone="critical" />}
                     <Badge text={task.priority} tone={priorityTone(task.priority)} />
                   </div>
@@ -330,7 +330,7 @@ export default async function PortalPage({
                       <p className={`text-[11px] font-semibold mb-0.5 ${fromClient ? "text-blue-100" : "text-slate-500"}`}>
                         {message.authorName} · {ROLE_DISPLAY[message.authorRole] ?? message.authorRole}
                       </p>
-                      <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                      <p className="whitespace-pre-wrap wrap-break-word">{message.body}</p>
                       <p className={`text-[10px] mt-1 ${fromClient ? "text-blue-200" : "text-slate-400"}`}>
                         {new Date(message.createdAt).toLocaleString("pt-BR")}
                       </p>

@@ -166,7 +166,7 @@ export default async function UsuariosPage({
             {users.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4"
+                className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 rounded-lg border border-slate-200 p-4"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900">

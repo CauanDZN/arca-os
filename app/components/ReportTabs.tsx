@@ -42,7 +42,7 @@ export function ReportTabs({ sections }: { sections: ReportSection[] }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 items-start print:block">
-      <nav className="print:hidden flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:sticky md:top-4">
+      <nav className="print:hidden flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 md:sticky md:top-4 no-scrollbar">
         {sections.map((s) => (
           <button
             key={s.id}

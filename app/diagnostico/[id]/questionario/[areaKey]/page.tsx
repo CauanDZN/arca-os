@@ -60,7 +60,7 @@ export default async function QuestionarioAreaPage({
 
         <form
           action={action}
-          className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-8 mt-4"
+          className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-8 mt-4"
         >
           <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             Área {areaIndex + 1} de {AREAS.length}
@@ -84,7 +84,7 @@ export default async function QuestionarioAreaPage({
                   <legend className="text-slate-800 font-medium mb-3">
                     {i + 1}. {q.text}
                   </legend>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-3 sm:flex gap-2">
                     {[0, 1, 2, 3, 4, 5].map((score) => (
                       <label
                         key={score}
@@ -101,7 +101,7 @@ export default async function QuestionarioAreaPage({
                           className="peer sr-only"
                           required
                         />
-                        <div className="rounded-lg border border-slate-300 py-2 text-sm font-semibold text-slate-600 peer-checked:bg-status-managed peer-checked:text-white peer-checked:border-status-managed hover:bg-slate-100 transition-colors">
+                        <div className="rounded-lg border border-slate-300 py-2.5 sm:py-2 text-sm font-semibold text-slate-600 peer-checked:bg-status-managed peer-checked:text-white peer-checked:border-status-managed hover:bg-slate-100 transition-colors">
                           {score}
                         </div>
                       </label>
@@ -124,11 +124,11 @@ export default async function QuestionarioAreaPage({
             })}
           </div>
 
-          <div className="mt-8 flex items-center justify-between">
+          <div className="mt-8 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
             {areaIndex > 0 ? (
               <Link
                 href={`/diagnostico/${id}/questionario/${AREAS[areaIndex - 1].key}`}
-                className="text-slate-600 font-medium hover:text-slate-900"
+                className="text-slate-600 font-medium hover:text-slate-900 text-center sm:text-left"
               >
                 ← Área anterior
               </Link>
@@ -137,7 +137,7 @@ export default async function QuestionarioAreaPage({
             )}
             <SubmitButton
               pendingText={isLast ? "Gerando relatório..." : "Salvando..."}
-              className="rounded-lg bg-blue-700 text-white font-semibold px-6 py-3 hover:bg-blue-800 transition-colors shadow-sm shadow-blue-700/20"
+              className="rounded-lg bg-blue-700 text-white font-semibold px-6 py-3 hover:bg-blue-800 transition-colors shadow-sm shadow-blue-700/20 w-full sm:w-auto"
             >
               {isLast ? "Concluir e gerar relatório" : "Próxima área →"}
             </SubmitButton>

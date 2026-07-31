@@ -12,9 +12,9 @@ import type { KanbanBoardProps } from "@/app/components/KanbanBoard";
 const LazyKanbanBoard = dynamic(() => import("@/app/components/KanbanBoard").then((m) => m.KanbanBoard), {
   ssr: false,
   loading: () => (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-40 animate-pulse rounded-2xl border border-slate-200/80 bg-white shadow-sm" />
+        <div key={i} className="shrink-0 w-[85vw] sm:w-auto sm:flex-1 h-40 animate-pulse rounded-2xl border border-slate-200/80 bg-white shadow-sm" />
       ))}
     </div>
   ),

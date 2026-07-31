@@ -418,20 +418,20 @@ export default async function RelatorioPage({
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4 print:bg-white">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex items-center justify-between print:hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 print:hidden">
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-800">
             ← Voltar ao início
           </Link>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <a
               href={`/api/diagnostico/${id}/export`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              className="flex-1 sm:flex-none rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors text-center"
             >
               Exportar CSV
             </a>
             <a
               href={`/api/diagnostico/${id}/pdf`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              className="flex-1 sm:flex-none rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors text-center"
             >
               Baixar PDF
             </a>

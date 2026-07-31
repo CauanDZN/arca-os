@@ -179,7 +179,7 @@ export function KanbanBoard({ diagnosticId, columns, initialTasks, epics, sprint
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar">
         {columns.map((col) => (
           <DroppableColumn key={col.status} column={col} taskCount={items[col.status]?.length ?? 0}>
             <SortableContext items={items[col.status] ?? []} strategy={verticalListSortingStrategy}>
@@ -236,7 +236,7 @@ function DroppableColumn({
 
   return (
     <div
-      className={`bg-white rounded-2xl shadow-sm border p-4 transition-colors ${
+      className={`shrink-0 w-[85vw] sm:w-auto sm:flex-1 snap-center bg-white rounded-2xl shadow-sm border p-4 transition-colors ${
         isOver ? "border-blue-300 bg-blue-50/40" : "border-slate-200/80"
       }`}
     >
@@ -245,7 +245,7 @@ function DroppableColumn({
         {column.title}
         <span className="ml-auto text-xs font-normal text-slate-400">{taskCount}</span>
       </h2>
-      <div ref={setNodeRef} className="space-y-3 min-h-[60px]">
+      <div ref={setNodeRef} className="space-y-3 min-h-15">
         {children}
       </div>
     </div>

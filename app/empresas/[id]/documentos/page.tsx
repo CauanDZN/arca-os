@@ -208,7 +208,7 @@ export default async function DocumentosPage({
                   {grouped.get(c.key)!.map((doc) => (
                     <li
                       key={doc.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:border-slate-300 transition-colors"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:border-slate-300 transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <DocumentIcon className="w-4 h-4 text-slate-400 shrink-0" />
@@ -224,7 +224,7 @@ export default async function DocumentosPage({
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {doc.aiSuggestedCategory && (
                           <Badge
                             text={`IA: ${doc.aiSuggestedCategory} · confiança ${doc.aiConfidence}`}

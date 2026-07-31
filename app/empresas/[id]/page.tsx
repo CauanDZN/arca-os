@@ -176,7 +176,7 @@ export default async function EmpresaDetailPage({
 
         {execution && (
           <Card>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900">
                 <PlayCircleIcon className="w-5 h-5 text-status-managed" />
                 Execução em andamento
@@ -230,7 +230,7 @@ export default async function EmpresaDetailPage({
               {[...diagnosticsWithScore].reverse().map(({ diagnostic, report }) => (
                 <div
                   key={diagnostic.id}
-                  className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-slate-200 p-4 hover:border-slate-300 transition-colors"
                 >
                   <div>
                     <p className="text-sm font-medium text-slate-800">
@@ -246,7 +246,7 @@ export default async function EmpresaDetailPage({
                       {report.maturityLabel}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge text={report.overallStatus} tone={statusTone(report.overallStatus)} />
                     {diagnostic.status === "em_andamento" ? (
                       <Link
