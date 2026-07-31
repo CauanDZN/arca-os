@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { AREAS } from "@/lib/areas";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
 import { Card } from "@/app/components/Card";
+import { Badge } from "@/app/components/Badge";
 import { DocumentIcon, EmptyBoxIcon } from "@/app/components/icons";
 
 function formatSize(bytes: number): string {
@@ -103,14 +104,22 @@ export default async function DocumentosPage({
                           </span>
                         </div>
                       </div>
-                      <form action={deleteDocument.bind(null, id, doc.id)}>
-                        <button
-                          type="submit"
-                          className="text-xs text-red-600 hover:underline whitespace-nowrap"
-                        >
-                          Remover
-                        </button>
-                      </form>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {doc.aiSuggestedCategory && (
+                          <Badge
+                            text={`IA: ${doc.aiSuggestedCategory} · confiança ${doc.aiConfidence}`}
+                            tone={doc.aiConfidence === "alta" ? "good" : "neutral"}
+                          />
+                        )}
+                        <form action={deleteDocument.bind(null, id, doc.id)}>
+                          <button
+                            type="submit"
+                            className="text-xs text-red-600 hover:underline whitespace-nowrap"
+                          >
+                            Remover
+                          </button>
+                        </form>
+                      </div>
                     </li>
                   ))}
                 </ul>

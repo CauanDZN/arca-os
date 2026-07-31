@@ -2,8 +2,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
+import { auditDataQuality } from "@/lib/data-quality";
 import { Badge } from "@/app/components/Badge";
-import { EmptyBoxIcon, DocumentIcon } from "@/app/components/icons";
+import { EmptyBoxIcon, DocumentIcon, SparklesIcon } from "@/app/components/icons";
 
 export default async function RelatoriosPage() {
   const diagnostics = await prisma.diagnostic.findMany({
@@ -19,6 +20,24 @@ export default async function RelatoriosPage() {
     return { diagnostic: d, report };
   });
 
+  const companies = await prisma.company.findMany({
+    include: { diagnostics: { include: { answers: true, tasks: true } } },
+  });
+  const qualityIssues = auditDataQuality(
+    companies.map((c) => ({
+      companyId: c.id,
+      companyName: c.name,
+      diagnostics: c.diagnostics.map((d) => ({
+        id: d.id,
+        status: d.status,
+        answers: d.answers.map((a) => ({ score: a.score, evidence: a.evidence })),
+      })),
+      openTasksWithoutResponsible: c.diagnostics
+        .flatMap((d) => d.tasks)
+        .filter((t) => t.status !== "done" && t.responsible.trim() === "").length,
+    }))
+  );
+
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -33,6 +52,22 @@ export default async function RelatoriosPage() {
             projeto de execução.
           </p>
         </div>
+
+        {qualityIssues.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
+              <SparklesIcon className="w-3.5 h-3.5" />
+              Agente de Qualidade de Dados
+            </p>
+            <div className="space-y-1 text-sm text-slate-800">
+              {qualityIssues.map((issue, i) => (
+                <p key={i}>
+                  <span className="font-medium">{issue.companyName}</span> — {issue.detail}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
           {rows.length === 0 ? (

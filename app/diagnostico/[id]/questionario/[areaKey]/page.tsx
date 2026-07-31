@@ -3,6 +3,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaByKey, getAreaIndex } from "@/lib/areas";
 import { saveAreaAnswers } from "@/app/actions";
+import { IMPACT_OPTIONS, URGENCY_OPTIONS, RISK_OPTIONS } from "@/lib/validation";
+import { getSession } from "@/lib/auth";
+import { assertCompanyAccess } from "@/lib/access";
 
 const SCALE_LABELS = [
   "0 · Inexistente",
@@ -11,18 +14,6 @@ const SCALE_LABELS = [
   "3 · Padronizado",
   "4 · Gerenciado",
   "5 · Otimizado",
-];
-
-const IMPACT_OPTIONS = ["Baixo", "Médio", "Alto"];
-const URGENCY_OPTIONS = ["Baixa", "Média", "Alta"];
-const RISK_OPTIONS = [
-  "Operacional",
-  "Financeiro",
-  "Comercial",
-  "Jurídico",
-  "Fiscal",
-  "Pessoas",
-  "Tecnologia",
 ];
 
 type ExistingAnswer = {
@@ -47,6 +38,7 @@ export default async function QuestionarioAreaPage({
 
   const diagnostic = await prisma.diagnostic.findUnique({ where: { id } });
   if (!diagnostic) notFound();
+  assertCompanyAccess(await getSession(), diagnostic.companyId);
 
   const existingAnswers = await prisma.answer.findMany({
     where: { diagnosticId: id, areaKey },

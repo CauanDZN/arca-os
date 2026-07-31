@@ -11,33 +11,89 @@ datasource db {
 }
 
 model Company {
-  id                String       @id @default(cuid())
-  name              String
-  segment           String
-  marketAge         String
-  employees         String
-  avgRevenue        String
-  margin            String
-  activeClients     String
-  productsServices  String
-  cities            String
-  painPoints        String
-  objectives        String // JSON-encoded array of selected objectives
-  createdAt         DateTime     @default(now())
-  diagnostics       Diagnostic[]
-  documents         Document[]
+  id               String          @id @default(cuid())
+  name             String
+  segment          String
+  marketAge        String
+  employees        String
+  avgRevenue       String
+  margin           String
+  activeClients    String
+  productsServices String
+  cities           String
+  painPoints       String
+  objectives       String // JSON-encoded array of selected objectives
+  createdAt        DateTime        @default(now())
+  diagnostics      Diagnostic[]
+  documents        Document[]
+  meetingNotes     MeetingNote[]
+  kpiEntries       KpiEntry[]
+  kpiSuggestions   KpiSuggestion[]
+}
+
+model KpiEntry {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  areaKey       String
+  indicatorName String
+  month         String // "YYYY-MM"
+  value         Float
+  target        Float? // meta/planejado opcional, pro comparativo realizado x planejado
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, areaKey, indicatorName, month])
+}
+
+model KpiSuggestion {
+  id            String   @id @default(cuid())
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  areaKey       String
+  indicatorName String
+  month         String
+  value         Float
+  status        String   @default("pendente") // pendente | aplicada | rejeitada
+  createdAt     DateTime @default(now())
 }
 
 model Diagnostic {
-  id          String   @id @default(cuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  status      String   @default("em_andamento") // em_andamento | concluido | em_execucao
-  aiNarrative String? // JSON: { executiveSummary, areaInsights: [{ areaKey, causaRaiz, recomendacao }] }
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  answers     Answer[]
-  tasks       Task[]
+  id               String            @id @default(cuid())
+  companyId        String
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status           String            @default("em_andamento") // em_andamento | concluido | em_execucao
+  aiNarrative      String? // JSON: { executiveSummary, areaInsights: [{ areaKey, causaRaiz, recomendacao }] }
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  answers          Answer[]
+  tasks            Task[]
+  verticalInsights VerticalInsight[]
+  sprints          Sprint[]
+  epics            Epic[]
+}
+
+model VerticalInsight {
+  id            String     @id @default(cuid())
+  diagnosticId  String
+  diagnostic    Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  areaKey       String
+  content       String // JSON: { analysis, recommendations: string[] }
+  documentsUsed Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  @@unique([diagnosticId, areaKey])
+}
+
+model MeetingNote {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rawNotes  String
+  summary   String? // JSON: { summary, decisions: string[], pending: string[] } — null without an AI key
+  createdAt DateTime @default(now())
 }
 
 model Answer {
@@ -59,28 +115,73 @@ model Answer {
 }
 
 model Document {
-  id           String   @id @default(cuid())
-  companyId    String
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  category     String // area key or "geral"
-  originalName String
-  storedName   String
-  mimeType     String
-  size         Int
-  createdAt    DateTime @default(now())
+  id                  String          @id @default(cuid())
+  companyId           String
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category            String // area key or "geral"
+  originalName        String
+  storedName          String
+  mimeType            String
+  size                Int
+  aiSuggestedCategory String? // free-form document type guessed by the Classificador de Documentos agent
+  aiConfidence        String? // "alta" | "baixa"
+  createdAt           DateTime        @default(now())
+  kpiSuggestions      KpiSuggestion[]
 }
 
 model Task {
+  id                 String      @id @default(cuid())
+  diagnosticId       String
+  diagnostic         Diagnostic  @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  areaKey            String
+  areaName           String
+  title              String
+  priority           String // Alta | Média | Baixa
+  timeframe          String // 30 dias | 31 a 90 dias | 3 a 12 meses
+  status             String      @default("todo") // todo | doing | done
+  position           Int         @default(0)
+  responsible        String      @default("")
+  dueDate            DateTime?
+  sprintId           String?
+  sprint             Sprint?     @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  epicId             String?
+  epic               Epic?       @relation(fields: [epicId], references: [id], onDelete: SetNull)
+  rootCause          String      @default("") // causa provável — auto-populada do aiNarrative na aprovação do plano
+  successIndicator   String      @default("") // indicador de sucesso
+  completionEvidence String      @default("") // evidência de conclusão
+  dependencies       String      @default("") // dependências (texto livre)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  events             TaskEvent[]
+}
+
+model Epic {
   id           String     @id @default(cuid())
   diagnosticId String
   diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
-  areaKey      String
-  areaName     String
-  title        String
-  priority     String // Alta | Média | Baixa
-  timeframe    String // 30 dias | 31 a 90 dias | 3 a 12 meses
-  status       String     @default("todo") // todo | doing | done
-  position     Int        @default(0)
+  name         String
+  description  String     @default("")
   createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  tasks        Task[]
+}
+
+model TaskEvent {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromStatus String
+  toStatus   String
+  createdAt  DateTime @default(now())
+}
+
+model Sprint {
+  id           String     @id @default(cuid())
+  diagnosticId String
+  diagnostic   Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  name         String
+  goal         String     @default("")
+  startDate    DateTime
+  endDate      DateTime
+  createdAt    DateTime   @default(now())
+  tasks        Task[]
 }

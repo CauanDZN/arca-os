@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
@@ -13,6 +14,11 @@ export async function GET(
 
   const doc = await prisma.document.findUnique({ where: { id } });
   if (!doc) {
+    return NextResponse.json({ error: "Documento não encontrado" }, { status: 404 });
+  }
+
+  const session = await getSession();
+  if (!session || (session.role === "cliente" && session.companyId !== doc.companyId)) {
     return NextResponse.json({ error: "Documento não encontrado" }, { status: 404 });
   }
 

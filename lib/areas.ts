@@ -369,3 +369,7 @@ export function getAreaByKey(key: string): Area | undefined {
 export function getAreaIndex(key: string): number {
   return AREAS.findIndex((a) => a.key === key);
 }
+
+// The 5 areas covered by the Agente de Diagnóstico Vertical (Financeiro /
+// Comercial / Fiscal / RH / Tecnologia) — a deliberate subset, not all 12.
+export const VERTICAL_AGENT_AREAS = ["financeiro", "comercial", "fiscal", "pessoas", "tecnologia"] as const;

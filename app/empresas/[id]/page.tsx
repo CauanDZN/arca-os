@@ -3,11 +3,20 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
-import { generateMaturityEvolution } from "@/lib/ai";
+import { generateMaturityEvolution, type MeetingMinutes } from "@/lib/ai";
+import { findAtRiskTasks } from "@/lib/pmo";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ScoreBar } from "@/app/components/ScoreBar";
-import { FolderIcon, TrendingUpIcon, EmptyBoxIcon, SparklesIcon } from "@/app/components/icons";
+import {
+  FolderIcon,
+  TrendingUpIcon,
+  EmptyBoxIcon,
+  SparklesIcon,
+  ListChecksIcon,
+  DocumentIcon,
+  PlayCircleIcon,
+} from "@/app/components/icons";
 
 export default async function EmpresaDetailPage({
   params,
@@ -23,10 +32,13 @@ export default async function EmpresaDetailPage({
         orderBy: { createdAt: "asc" },
         include: { answers: true, tasks: true },
       },
-      documents: true,
+      documents: { orderBy: { createdAt: "desc" }, take: 4 },
+      meetingNotes: { orderBy: { createdAt: "desc" }, take: 2 },
     },
   });
   if (!company) notFound();
+
+  const totalDocuments = await prisma.document.count({ where: { companyId: id } });
 
   const diagnosticsWithScore = company.diagnostics.map((d) => {
     const report = buildReport(
@@ -44,6 +56,38 @@ export default async function EmpresaDetailPage({
       { date: previous.diagnostic.createdAt, report: previous.report },
       { date: current.diagnostic.createdAt, report: current.report }
     );
+  }
+
+  const inExecution = [...diagnosticsWithScore].reverse().find((d) => d.diagnostic.tasks.length > 0);
+  let execution: {
+    diagnosticId: string;
+    pct: number;
+    done: number;
+    total: number;
+    overdueCount: number;
+    noOwnerCount: number;
+  } | null = null;
+  if (inExecution) {
+    const tasks = inExecution.diagnostic.tasks;
+    const done = tasks.filter((t) => t.status === "done").length;
+    const alerts = findAtRiskTasks(
+      tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        areaName: t.areaName,
+        status: t.status,
+        dueDate: t.dueDate,
+        responsible: t.responsible,
+      }))
+    );
+    execution = {
+      diagnosticId: inExecution.diagnostic.id,
+      pct: Math.round((done / tasks.length) * 100),
+      done,
+      total: tasks.length,
+      overdueCount: new Set(alerts.filter((a) => a.reason === "atrasada").map((a) => a.taskId)).size,
+      noOwnerCount: alerts.filter((a) => a.reason === "sem_responsavel").length,
+    };
   }
 
   return (
@@ -65,7 +109,21 @@ export default async function EmpresaDetailPage({
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
               <FolderIcon />
-              Data Room ({company.documents.length})
+              Data Room ({totalDocuments})
+            </Link>
+            <Link
+              href={`/empresas/${id}/reunioes`}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <ListChecksIcon className="w-4 h-4" />
+              Atas de Reunião
+            </Link>
+            <Link
+              href={`/empresas/${id}/indicadores`}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <TrendingUpIcon className="w-4 h-4" />
+              Indicadores
             </Link>
             <Link
               href="/diagnostico/novo"
@@ -104,6 +162,44 @@ export default async function EmpresaDetailPage({
                 </div>
               ))}
             </div>
+          </Card>
+        )}
+
+        {execution && (
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+                <PlayCircleIcon className="w-5 h-5 text-status-managed" />
+                Execução em andamento
+              </h2>
+              <Link
+                href={`/diagnostico/${execution.diagnosticId}/projeto`}
+                className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-3 py-1.5 hover:bg-blue-800 transition-colors"
+              >
+                Ver Kanban →
+              </Link>
+            </div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs text-slate-500">Progresso do plano de ação</span>
+              <span className="text-lg font-bold text-slate-900">{execution.pct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-200 overflow-hidden mb-1">
+              <div
+                className="h-full rounded-full bg-status-good transition-all"
+                style={{ width: `${execution.pct}%` }}
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              {execution.done} de {execution.total} ações concluídas
+            </p>
+            {(execution.overdueCount > 0 || execution.noOwnerCount > 0) && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <SparklesIcon className="w-3.5 h-3.5 shrink-0" />
+                Agente PMO: {execution.overdueCount > 0 && `${execution.overdueCount} atrasada(s)`}
+                {execution.overdueCount > 0 && execution.noOwnerCount > 0 && " · "}
+                {execution.noOwnerCount > 0 && `${execution.noOwnerCount} sem responsável`}
+              </p>
+            )}
           </Card>
         )}
 
@@ -173,6 +269,62 @@ export default async function EmpresaDetailPage({
             </div>
           )}
         </Card>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-slate-900">Documentos recentes</h2>
+              <Link href={`/empresas/${id}/documentos`} className="text-xs text-blue-700 hover:underline">
+                Ver todos →
+              </Link>
+            </div>
+            {company.documents.length > 0 ? (
+              <ul className="space-y-2">
+                {company.documents.map((doc) => (
+                  <li key={doc.id} className="flex items-center gap-2 text-sm">
+                    <DocumentIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                    <a
+                      href={`/api/documentos/${doc.id}`}
+                      className="text-slate-700 hover:text-blue-700 hover:underline truncate"
+                    >
+                      {doc.originalName}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-400">Nenhum documento enviado ainda.</p>
+            )}
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-slate-900">Atas recentes</h2>
+              <Link href={`/empresas/${id}/reunioes`} className="text-xs text-blue-700 hover:underline">
+                Ver todas →
+              </Link>
+            </div>
+            {company.meetingNotes.length > 0 ? (
+              <ul className="space-y-3">
+                {company.meetingNotes.map((note) => {
+                  const minutes: MeetingMinutes | null = note.summary ? JSON.parse(note.summary) : null;
+                  return (
+                    <li key={note.id} className="text-sm">
+                      <p className="text-xs text-slate-400 mb-0.5">
+                        {new Date(note.createdAt).toLocaleDateString("pt-BR")}
+                      </p>
+                      <p className="text-slate-700 line-clamp-2">
+                        {minutes?.summary ?? note.rawNotes}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-400">Nenhuma ata gerada ainda.</p>
+            )}
+          </Card>
+        </div>
       </div>
     </main>
   );

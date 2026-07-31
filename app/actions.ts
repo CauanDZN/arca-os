@@ -4,9 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaIndex } from "@/lib/areas";
 import { buildReport } from "@/lib/scoring";
 import { generateAiNarrative } from "@/lib/ai";
-import { redirect } from "next/navigation";
+import { answerFieldsSchema } from "@/lib/validation";
+import { getSession } from "@/lib/auth";
+import { assertCompanyAccess } from "@/lib/access";
+import { redirect, notFound } from "next/navigation";
 
 export async function createDiagnostic(formData: FormData) {
+  const session = await getSession();
+  // creating a brand-new company/diagnostic is an Arca-side action — a
+  // cliente only ever operates within their own already-existing company.
+  if (session?.role === "cliente") notFound();
+
   const objectives = formData.getAll("objectives").map(String);
 
   const company = await prisma.company.create({
@@ -37,17 +45,27 @@ export async function saveAreaAnswers(
   areaKey: string,
   formData: FormData
 ) {
+  const session = await getSession();
+  const owning = await prisma.diagnostic.findUnique({
+    where: { id: diagnosticId },
+    select: { companyId: true },
+  });
+  if (!owning) notFound();
+  assertCompanyAccess(session, owning.companyId);
+
   const area = AREAS.find((a) => a.key === areaKey);
   if (!area) throw new Error("Área inválida");
 
   for (const question of area.questions) {
     const raw = formData.get(question.id);
-    const score = raw !== null ? Number(raw) : 0;
-    const evidence = String(formData.get(`${question.id}__evidence`) ?? "");
-    const responsible = String(formData.get(`${question.id}__responsible`) ?? "");
-    const impact = String(formData.get(`${question.id}__impact`) ?? "Médio");
-    const urgency = String(formData.get(`${question.id}__urgency`) ?? "Média");
-    const risk = String(formData.get(`${question.id}__risk`) ?? "Operacional");
+    const fields = answerFieldsSchema.parse({
+      score: raw !== null ? Number(raw) : 0,
+      evidence: String(formData.get(`${question.id}__evidence`) ?? ""),
+      responsible: String(formData.get(`${question.id}__responsible`) ?? ""),
+      impact: String(formData.get(`${question.id}__impact`) ?? "Médio"),
+      urgency: String(formData.get(`${question.id}__urgency`) ?? "Média"),
+      risk: String(formData.get(`${question.id}__risk`) ?? "Operacional"),
+    });
 
     await prisma.answer.upsert({
       where: {
@@ -57,18 +75,8 @@ export async function saveAreaAnswers(
           questionId: question.id,
         },
       },
-      update: { score, evidence, responsible, impact, urgency, risk },
-      create: {
-        diagnosticId,
-        areaKey,
-        questionId: question.id,
-        score,
-        evidence,
-        responsible,
-        impact,
-        urgency,
-        risk,
-      },
+      update: fields,
+      create: { diagnosticId, areaKey, questionId: question.id, ...fields },
     });
   }
 

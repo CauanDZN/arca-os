@@ -26,7 +26,7 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
 
 ## Suíte de testes — como funciona e armadilhas
 
-`npm test` (`vitest run`). 5 arquivos, 35 testes, todos devem passar antes de considerar qualquer
+`npm test` (`vitest run`). 9 arquivos, 91 testes, todos devem passar antes de considerar qualquer
 mudança pronta.
 
 **Provisionamento do banco** (`vitest.config.ts`, roda uma vez ao iniciar o Vitest, fora dos test
@@ -67,6 +67,14 @@ adicionar um teste novo que faz upload, replique essa limpeza ou vai sujar o rep
 comportamento do Next.js dev/build, não do Vitest). Isso é *usado a favor*: o teste de conclusão
 do diagnóstico em `test/integration.test.ts` valida o fallback gracioso sem precisar mockar nada.
 
+**Mockando `@/lib/auth`** (`test/integration.test.ts`): como toda Server Action agora chama
+`getSession()` internamente (ver seção de login abaixo), o arquivo mocka `@/lib/auth` inteiro com
+`vi.hoisted(() => vi.fn())` pra `getSession`/`setSessionCookie`/`clearSessionCookie`, e um
+`beforeEach` reseta `getSession` pra resolver uma sessão `admin` por padrão — assim os ~85 testes
+que já existiam antes do RBAC continuam passando sem saber que auth existe. Testes que querem
+validar o bloqueio de `cliente` chamam `mockGetSession.mockResolvedValue({ role: "cliente", ... })`
+antes da chamada que deve falhar.
+
 ## Comandos úteis
 
 ```bash
@@ -79,10 +87,42 @@ npx tsc --noEmit                        # type-check sem build
 npx eslint .                            # lint
 ```
 
+## Login mockado — como funciona e seus limites
+
+Implementado a pedido explícito do usuário ("mesmo que mockado"), depois de ter ficado de fora do
+MVP inicial de propósito. Três peças:
+
+- **`lib/session.ts`** — tipo `Session` e `encodeSession`/`decodeSession`, funções puras sem
+  dependência de `next/headers` (uso de `btoa`/`atob` manual em vez de `Buffer`, porque este arquivo
+  também é importado por `proxy.ts` — a partir do Next 16 o Proxy roda em Node por padrão, mas ainda
+  pode rodar em Edge se configurado, e o código do Proxy não deve depender de módulos/globais
+  compartilhados; `btoa`/`atob` funcionam nos dois ambientes, `Buffer` não é garantido).
+  **O cookie não é assinado nem criptografado** — é só JSON em base64. Isso é intencional pro
+  escopo "mockado", mas significa que o payload pode ser forjado editando o cookie no devtools; uma
+  implementação real usaria sessão assinada (`next-auth`, `iron-session`).
+- **`lib/auth.ts`** — só roda em Node (usa `next/headers`): `getSession`/`setSessionCookie`/
+  `clearSessionCookie`.
+- **`lib/auth-users.ts`** — `MOCK_USERS`, uma lista estática (não persistida no banco) com 5
+  usuários cobrindo os 3 papéis (`admin`, `consultor`, `cliente`), cada um com um `title` que mapeia
+  pro cargo real da visão organizacional do plano da Arca (seção 16 do pitch do Cícero). Senha em
+  texto puro de propósito — não é um cofre de credenciais real.
+
+**Regras de acesso**: `proxy.ts` bloqueia rotas sem sessão e redireciona `cliente` pra longe de
+`/empresas`, `/relatorios`, `/diagnostico/novo` e de qualquer `/empresas/[id]` que não seja o dele —
+tudo isso sem tocar no banco (Edge runtime não roda o driver do Prisma). O que o middleware **não**
+consegue verificar é se um `/diagnostico/[id]` pertence à empresa do cliente logado, porque isso
+exige uma query — por isso `lib/access.ts` (`assertCompanyAccess`) é chamado de novo, com o
+`companyId` já resolvido, em toda página de diagnóstico E em toda Server Action que muta dado (dupla
+camada: se a página deixar passar, a action ainda barra). Se adicionar uma Server Action nova que
+recebe `companyId` ou `diagnosticId`, replique esse padrão — não existe verificação automática.
+
+Se `GEMINI_API_KEY`/testes forem afetados: o mock de `next/navigation` em `test/integration.test.ts`
+agora também precisa exportar `notFound` (não só `redirect`), porque `assertCompanyAccess` chama
+`notFound()` quando bloqueia acesso — se você adicionar um teste novo que usa `next/navigation` sem
+importar desse mock, vai quebrar com "notFound is not a function".
+
 ## Áreas sensíveis — não fazer sem confirmar com o usuário
 
-- **Login/autenticação real**: não implementado de propósito (ver README). Se pedirem, trate como
-  feature própria — não hackeie algo simplificado "pra já funcionar".
 - **Deploy em produção**: nunca executar deploy real (Vercel etc.) sem o usuário presente e
   confirmando — toca conta/credenciais de hospedagem dele.
 - **Upload de arquivos via browser automation**: automação headless não abre o diálogo nativo do

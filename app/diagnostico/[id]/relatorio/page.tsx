@@ -2,11 +2,15 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildReport, type AreaScore } from "@/lib/scoring";
-import type { AiNarrative } from "@/lib/ai";
+import type { AiNarrative, VerticalInsight } from "@/lib/ai";
 import { findEvidenceGaps } from "@/lib/audit";
 import { statusTone, classificationTone, priorityTone } from "@/lib/badge-tones";
+import { getAreaByKey, VERTICAL_AGENT_AREAS } from "@/lib/areas";
+import { getSession } from "@/lib/auth";
+import { assertCompanyAccess } from "@/lib/access";
 import { PrintButton } from "./PrintButton";
 import { approveActionPlan } from "@/app/actions-project";
+import { generateVerticalInsightAction } from "@/app/actions-vertical";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ScoreBar } from "@/app/components/ScoreBar";
@@ -17,6 +21,7 @@ const SECTIONS = [
   { id: "sumario", label: "Sumário" },
   { id: "maturidade", label: "Maturidade" },
   { id: "analitico", label: "Diagnóstico" },
+  { id: "especialistas", label: "Agentes Especialistas" },
   { id: "priorizacao", label: "Priorização" },
   { id: "plano", label: "Plano de Ação" },
 ];
@@ -30,9 +35,10 @@ export default async function RelatorioPage({
 
   const diagnostic = await prisma.diagnostic.findUnique({
     where: { id },
-    include: { company: true, answers: true, tasks: true },
+    include: { company: true, answers: true, tasks: true, verticalInsights: true },
   });
   if (!diagnostic) notFound();
+  assertCompanyAccess(await getSession(), diagnostic.companyId);
 
   const report = buildReport(
     diagnostic.answers.map((a) => ({
@@ -52,6 +58,19 @@ export default async function RelatorioPage({
   const missingEvidence = new Set(evidenceGaps.map((g) => `${g.areaKey}::${g.questionText}`));
   const areasWithGaps = report.areaScores.filter((a) => a.weakestQuestions.length > 0);
 
+  const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
+  const verticalInsightByArea = new Map(
+    diagnostic.verticalInsights.map((v) => [
+      v.areaKey,
+      { ...(JSON.parse(v.content) as VerticalInsight), documentsUsed: v.documentsUsed },
+    ])
+  );
+  const verticalAreas = VERTICAL_AGENT_AREAS.map((key) => {
+    const area = getAreaByKey(key)!;
+    const areaScore = report.areaScores.find((a) => a.area.key === key)!;
+    return { area, areaScore, insight: verticalInsightByArea.get(key) ?? null };
+  });
+
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4 print:bg-white">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -60,6 +79,12 @@ export default async function RelatorioPage({
             ← Voltar ao início
           </Link>
           <div className="flex gap-2">
+            <a
+              href={`/api/diagnostico/${id}/export`}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Exportar CSV
+            </a>
             <a
               href={`/api/diagnostico/${id}/pdf`}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
@@ -251,6 +276,73 @@ export default async function RelatorioPage({
                 </details>
               );
             })}
+          </div>
+        </Card>
+
+        {/* Agentes Especialistas por Área */}
+        <Card id="especialistas">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-xl font-bold text-slate-900">Agentes Especialistas por Área</h2>
+          </div>
+          <p className="text-sm text-slate-500 mb-4">
+            Aprofunda a análise em Financeiro, Comercial, Fiscal, Pessoas (RH) e Tecnologia, cruzando
+            as respostas do questionário com os documentos do Data Room categorizados em cada área.
+          </p>
+          <div className="space-y-2">
+            {verticalAreas.map(({ area, areaScore, insight }) => (
+              <details key={area.key} className="group rounded-lg border border-slate-200 open:bg-slate-50/60">
+                <summary className="flex items-center gap-3 cursor-pointer select-none px-4 py-3 list-none">
+                  <span className="text-slate-400 text-xs transition-transform group-open:rotate-90">▶</span>
+                  <span className="font-medium text-slate-900 flex-1">{area.name}</span>
+                  <span className="text-xs text-slate-400">{areaScore.average.toFixed(1)}/5</span>
+                  <Badge text={areaScore.status} tone={statusTone(areaScore.status)} />
+                </summary>
+                <div className="px-4 pb-4 pt-1">
+                  {insight ? (
+                    <div className="rounded-xl bg-blue-50/70 border border-blue-100 p-4">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">
+                        <SparklesIcon className="w-3.5 h-3.5" />
+                        Agente de Diagnóstico Vertical · Gerado por IA
+                        {insight.documentsUsed > 0 && (
+                          <span className="normal-case font-normal text-blue-600">
+                            · {insight.documentsUsed} documento(s) do Data Room considerado(s)
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-sm text-slate-800 leading-relaxed mb-3">{insight.analysis}</p>
+                      {insight.recommendations.length > 0 && (
+                        <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
+                          {insight.recommendations.map((r, i) => (
+                            <li key={i}>{r}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <form action={generateVerticalInsightAction.bind(null, id, area.key)} className="mt-3">
+                        <button
+                          type="submit"
+                          className="text-xs font-medium text-blue-700 hover:underline"
+                        >
+                          Gerar novamente
+                        </button>
+                      </form>
+                    </div>
+                  ) : hasGeminiKey ? (
+                    <form action={generateVerticalInsightAction.bind(null, id, area.key)}>
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                      >
+                        Gerar análise com o Agente Especialista →
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Sem chave de IA configurada — análise especialista indisponível.
+                    </p>
+                  )}
+                </div>
+              </details>
+            ))}
           </div>
         </Card>
 

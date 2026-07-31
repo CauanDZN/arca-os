@@ -9,7 +9,16 @@ vi.mock("@google/genai", () => ({
   }),
 }));
 
-import { generateAiNarrative, generateMaturityEvolution } from "@/lib/ai";
+import {
+  generateAiNarrative,
+  generateMaturityEvolution,
+  generateSprintReport,
+  classifyDocument,
+  generateVerticalInsight,
+  generateMeetingMinutes,
+  generatePerformanceInsight,
+  extractKpiSuggestions,
+} from "@/lib/ai";
 
 const company = { name: "Empresa Teste", segment: "Varejo", painPoints: "", objectives: [] };
 const report = buildReport([]);
@@ -135,5 +144,353 @@ describe("generateMaturityEvolution", () => {
     mockGenerateContent.mockResolvedValueOnce({ text: "  A empresa evoluiu bem.  " });
     const result = await generateMaturityEvolution("Empresa Teste", previous, current);
     expect(result).toBe("A empresa evoluiu bem.");
+  });
+});
+
+describe("generateSprintReport", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  const events = [
+    {
+      taskTitle: "Implantar DRE mensal",
+      areaName: "Financeiro e Controladoria",
+      fromStatus: "todo",
+      toStatus: "doing",
+      createdAt: new Date("2026-07-15"),
+    },
+  ];
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await generateSprintReport("Empresa Teste", events, 30);
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null without calling the API when there are no events in the period", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const result = await generateSprintReport("Empresa Teste", [], 30);
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await generateSprintReport("Empresa Teste", events, 30);
+    expect(result).toBeNull();
+  });
+
+  it("returns the trimmed paragraph on success", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: "  Boa evolução no período.  " });
+    const result = await generateSprintReport("Empresa Teste", events, 30);
+    expect(result).toBe("Boa evolução no período.");
+  });
+});
+
+describe("classifyDocument", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await classifyDocument("extrato.pdf", "application/pdf", "texto extraído");
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await classifyDocument("extrato.pdf", "application/pdf", "texto extraído");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the response is missing a valid confidence value", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({
+      text: JSON.stringify({ category: "DRE", confidence: "talvez" }),
+    });
+    const result = await classifyDocument("extrato.pdf", "application/pdf", "texto extraído");
+    expect(result).toBeNull();
+  });
+
+  it("parses a valid JSON response", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = { category: "Extrato bancário", confidence: "alta" };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await classifyDocument("extrato.pdf", "application/pdf", "texto extraído");
+    expect(result).toEqual(payload);
+  });
+
+  it("still classifies (with low confidence expected from the prompt) when there is no extracted text", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = { category: "Outro", confidence: "baixa" };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await classifyDocument("foto.jpg", "image/jpeg", null);
+    expect(result).toEqual(payload);
+  });
+});
+
+describe("generateVerticalInsight", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  const answers = [
+    {
+      questionText: "A empresa possui DRE mensal gerencial?",
+      score: 2,
+      evidence: "planilha manual desatualizada",
+      responsible: "Ana",
+      impact: "Alto",
+      urgency: "Alta",
+      risk: "Financeiro",
+    },
+  ];
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await generateVerticalInsight("Empresa Teste", "Financeiro e Controladoria", 2, "Frágil", answers, []);
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await generateVerticalInsight("Empresa Teste", "Financeiro e Controladoria", 2, "Frágil", answers, []);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the response is missing recommendations", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify({ analysis: "..." }) });
+    const result = await generateVerticalInsight("Empresa Teste", "Financeiro e Controladoria", 2, "Frágil", answers, []);
+    expect(result).toBeNull();
+  });
+
+  it("parses a valid JSON response, with or without Data Room documents", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = { analysis: "Análise aprofundada.", recommendations: ["Implantar DRE mensal"] };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await generateVerticalInsight(
+      "Empresa Teste",
+      "Financeiro e Controladoria",
+      2,
+      "Frágil",
+      answers,
+      [{ name: "extrato.pdf", text: "saldo em conta: R$ 10.000" }]
+    );
+    expect(result).toEqual(payload);
+  });
+});
+
+describe("generateMeetingMinutes", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await generateMeetingMinutes("Empresa Teste", "Discutimos o atraso na contratação.");
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await generateMeetingMinutes("Empresa Teste", "Discutimos o atraso na contratação.");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the response is missing the pending list", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({
+      text: JSON.stringify({ summary: "...", decisions: [] }),
+    });
+    const result = await generateMeetingMinutes("Empresa Teste", "Discutimos o atraso na contratação.");
+    expect(result).toBeNull();
+  });
+
+  it("parses a valid JSON response", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = {
+      summary: "Reunião sobre contratação do gerente comercial.",
+      decisions: ["Adiar lançamento da nova linha para setembro"],
+      pending: ["Ana fecha a vaga de gerente comercial até sexta"],
+    };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await generateMeetingMinutes("Empresa Teste", "Discutimos o atraso na contratação.");
+    expect(result).toEqual(payload);
+  });
+});
+
+describe("generatePerformanceInsight", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  const entries = [
+    { areaName: "Financeiro e Controladoria", indicatorName: "Receita mensal", month: "2026-06", value: 100000 },
+    { areaName: "Financeiro e Controladoria", indicatorName: "Receita mensal", month: "2026-07", value: 80000 },
+  ];
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await generatePerformanceInsight("Empresa Teste", entries);
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null without calling the API when there are no KPI entries", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const result = await generatePerformanceInsight("Empresa Teste", []);
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await generatePerformanceInsight("Empresa Teste", entries);
+    expect(result).toBeNull();
+  });
+
+  it("returns the trimmed paragraph on success", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: "  Receita em queda no último mês.  " });
+    const result = await generatePerformanceInsight("Empresa Teste", entries);
+    expect(result).toBe("Receita em queda no último mês.");
+  });
+});
+
+describe("extractKpiSuggestions", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  const allowedIndicators = ["Receita mensal", "Margem bruta"];
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "Receita de julho: R$ 310.000");
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null without calling the API when the document text is empty", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "   ");
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "texto qualquer");
+    expect(result).toBeNull();
+  });
+
+  it("parses a valid JSON response", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = { suggestions: [{ indicatorName: "Receita mensal", month: "2026-07", value: 310000 }] };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "Receita de julho: R$ 310.000");
+    expect(result).toEqual(payload.suggestions);
+  });
+
+  it("filters out a suggestion whose indicator isn't in the allowed list", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = {
+      suggestions: [
+        { indicatorName: "Receita mensal", month: "2026-07", value: 310000 },
+        { indicatorName: "Indicador Inventado", month: "2026-07", value: 999 },
+      ],
+    };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "texto");
+    expect(result).toEqual([{ indicatorName: "Receita mensal", month: "2026-07", value: 310000 }]);
+  });
+
+  it("filters out a suggestion with a malformed month", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = { suggestions: [{ indicatorName: "Receita mensal", month: "julho de 2026", value: 310000 }] };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "texto");
+    expect(result).toEqual([]);
+  });
+
+  it("returns an empty array (not null) when the model finds nothing", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify({ suggestions: [] }) });
+    const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "texto sem número nenhum");
+    expect(result).toEqual([]);
   });
 });

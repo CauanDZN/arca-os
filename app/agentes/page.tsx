@@ -32,8 +32,11 @@ const GROUPS: AgentGroup[] = [
       },
       {
         name: "Agente de Diagnóstico Financeiro / Comercial / Fiscal / RH / Tecnologia",
-        description: "Agentes especializados por vertical, com leitura de evidências e documentos do Data Room.",
-        status: "planejado",
+        description:
+          "Aprofunda a análise de cada uma das 5 verticais cruzando as respostas do questionário (evidências, responsável, impacto/urgência/risco) com o conteúdo real dos documentos do Data Room categorizados naquela área — sem integração bancária ou contábil externa, só o que já está no diagnóstico e no Data Room (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/relatorios", label: "Ver em Agentes Especialistas no relatório" },
       },
     ],
   },
@@ -43,13 +46,19 @@ const GROUPS: AgentGroup[] = [
     agents: [
       {
         name: "Classificador de documentos do Data Room",
-        description: "Identifica automaticamente o tipo de documento enviado (extrato, DRE, contrato) e sugere a categoria.",
-        status: "planejado",
+        description:
+          "Lê o conteúdo de PDFs e arquivos de texto enviados e sugere o tipo do documento (extrato, DRE, contrato, nota fiscal...) com um nível de confiança — quando o formato não pode ser lido (imagem, planilha), classifica só pelo nome do arquivo e marca confiança baixa (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/empresas", label: "Ver no Data Room de uma empresa" },
       },
       {
         name: "Gerador de ata de reunião",
-        description: "Resume decisões e pendências a partir de notas de reunião.",
-        status: "planejado",
+        description:
+          "Organiza anotações brutas de reunião (coladas ou digitadas manualmente — sem integração de calendário ou transcrição de áudio) em resumo, decisões e pendências (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/empresas", label: "Ver em Atas de Reunião de uma empresa" },
       },
     ],
   },
@@ -59,19 +68,31 @@ const GROUPS: AgentGroup[] = [
     agents: [
       {
         name: "Agente PMO",
-        description: "Analisa o board de execução e aponta ações atrasadas ou sem responsável.",
-        status: "planejado",
+        description:
+          "Verifica todas as ações abertas do board e aponta as que estão com prazo vencido ou sem responsável definido — regra de negócio, roda em toda visita ao Kanban.",
+        status: "ativo",
+        seeItAt: { href: "/empresas", label: "Ver no Kanban de um projeto" },
       },
       {
         name: "Agente de Relatório de Sprint",
-        description: "Gera resumo periódico do progresso do projeto para o comitê de gestão.",
-        status: "planejado",
+        description:
+          "Lê o histórico de movimentações do Kanban nos últimos 30 dias e escreve um resumo do progresso para o comitê de gestão (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/empresas", label: "Ver no Kanban de um projeto" },
+      },
+      {
+        name: "Agente Scrum Master",
+        description:
+          "Verifica sprints atrasados (passaram do prazo sem 100% concluído), sprints sem nenhuma ação atribuída e ações paradas há mais de 14 dias — regra de negócio, roda em toda visita ao Kanban.",
+        status: "ativo",
+        seeItAt: { href: "/empresas", label: "Ver no Kanban de um projeto" },
       },
     ],
   },
   {
     title: "Grupo 4 · Agentes de Performance Contínua",
-    purpose: "Comparam a evolução do negócio entre diagnósticos.",
+    purpose: "Comparam a evolução do negócio entre diagnósticos e ao longo do tempo.",
     agents: [
       {
         name: "Agente de Evolução de Maturidade",
@@ -80,6 +101,21 @@ const GROUPS: AgentGroup[] = [
         status: "ativo",
         requiresGemini: true,
         seeItAt: { href: "/empresas", label: "Ver no cockpit da empresa" },
+      },
+      {
+        name: "Agente de Performance por Área",
+        description:
+          "Lê o histórico de indicadores do Cockpit de Performance (Financeiro, Comercial, Marketing...) e narra tendências — um agente genérico por área em vez de um agente fixo por indicador, cobrindo Resultado Financeiro/Performance Comercial/Margem/Produtividade do plano original (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/empresas", label: "Ver em Indicadores de uma empresa" },
+      },
+      {
+        name: "Agente de Alertas Estratégicos",
+        description:
+          "Compara o valor mais recente de cada indicador com o mês anterior e sinaliza queda ou alta acima de 15% — regra de negócio, sem IA, sem depender de narrativa.",
+        status: "ativo",
+        seeItAt: { href: "/empresas", label: "Ver em Indicadores de uma empresa" },
       },
     ],
   },
@@ -93,6 +129,13 @@ const GROUPS: AgentGroup[] = [
           "Verifica se cada resposta crítica (nota ≤ 2) tem evidência anexada antes de entrar no relatório final — regra de negócio, roda em toda geração de relatório.",
         status: "ativo",
         seeItAt: { href: "/relatorios", label: "Ver no relatório" },
+      },
+      {
+        name: "Agente de Qualidade de Dados",
+        description:
+          "Varre todas as empresas da plataforma (não uma só) atrás de lacuna estrutural — diagnóstico concluído sem nenhuma evidência, notas todas zeradas (indício de dado de teste), ações em massa sem responsável — regra de negócio, roda em toda visita à central de relatórios.",
+        status: "ativo",
+        seeItAt: { href: "/relatorios", label: "Ver em Relatórios" },
       },
     ],
   },

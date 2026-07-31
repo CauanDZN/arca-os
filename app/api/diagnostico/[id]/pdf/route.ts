@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { buildReport } from "@/lib/scoring";
 import { renderReportPdf } from "@/lib/pdf";
 import type { AiNarrative } from "@/lib/ai";
+import { getSession } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -16,6 +17,11 @@ export async function GET(
   });
 
   if (!diagnostic) {
+    return NextResponse.json({ error: "Diagnóstico não encontrado" }, { status: 404 });
+  }
+
+  const session = await getSession();
+  if (!session || (session.role === "cliente" && session.companyId !== diagnostic.companyId)) {
     return NextResponse.json({ error: "Diagnóstico não encontrado" }, { status: 404 });
   }
 

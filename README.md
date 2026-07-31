@@ -72,10 +72,15 @@ GEMINI_API_KEY="sua-chave-aqui"
 ## Estrutura de pastas
 
 ```
+proxy.ts                                  RBAC de rota (login obrigatório, escopo do papel "cliente")
+
 app/
   page.tsx                                Landing page
-  layout.tsx                              Layout raiz + NavBar global
-  components/NavBar.tsx                   Navegação (Empresas / Agentes de IA / Integrações)
+  layout.tsx                              Layout raiz + NavBar global (busca a sessão)
+  login/page.tsx                          Tela de login mockado
+  usuarios/page.tsx                       Lista de usuários mockados (admin only)
+  actions-auth.ts                         Server actions: login, logout
+  components/NavBar.tsx                   Navegação (varia por papel) + usuário logado/logout
 
   diagnostico/novo/                       Etapa 1 — cadastro da empresa
   diagnostico/[id]/questionario/[areaKey]/  Etapa 2 — wizard de 12 passos, com evidência/
@@ -105,6 +110,10 @@ lib/
   ai.ts (+ .test.ts)                      Integração com Gemini para o texto consultivo
   pdf.tsx (+ .test.ts)                    Layout do PDF (@react-pdf/renderer)
   prisma.ts                               Cliente Prisma singleton
+  session.ts (+ .test.ts)                 Tipo Session + encode/decode do cookie (puro, Edge-safe)
+  auth.ts                                 getSession/setSessionCookie/clearSessionCookie (Node only)
+  auth-users.ts                           Lista estática de usuários mockados
+  access.ts                               assertCompanyAccess — trava o papel "cliente" na própria empresa
 
 prisma/schema.prisma                      Modelos: Company, Diagnostic, Answer, Document, Task
 test/integration.test.ts                  Teste de integração ponta a ponta
@@ -144,13 +153,30 @@ persistido uma única vez na conclusão do diagnóstico — não é regenerado a
 |---|---|
 | Diagnóstico, pontuação, relatório, PDF, Kanban, Data Room | **Real** — funcional de ponta a ponta, com teste de integração cobrindo o fluxo |
 | Narrativa de IA no relatório | **Real**, condicionada a `GEMINI_API_KEY` configurada |
+| Login e controle de acesso por papel (admin/consultor/cliente) | **Mockado, mas com regras reais** — ver seção abaixo |
 | Tela de Integrações | **Mockup** — lista as integrações previstas, botão "Conectar" desabilitado |
-| Central de Agentes de IA | **Roadmap honesto** — só marca "Ativo" o que de fato está ligado (o gerador de narrativa) |
+| Central de Agentes de IA | **Roadmap honesto** — só marca "Ativo" o que de fato está ligado |
+
+## Login mockado
+
+Implementado a pedido — não é autenticação de produção, mas a lógica de controle de acesso (quem
+pode ver o quê) é real, não decorativa.
+
+- **Usuários**: lista estática em `lib/auth-users.ts` (5 usuários, não persistidos no banco),
+  cobrindo 3 papéis — `admin`, `consultor` e `cliente` — mapeados pra cargos da visão organizacional
+  do plano da Arca (CEO/Head BTO, Consultor Líder, Sponsor do Cliente etc.). A tela `/login` lista
+  todos com um botão de "entrar como" pra facilitar teste.
+- **Sessão**: cookie httpOnly com um JSON em base64 — **não é assinado nem criptografado**. Prova
+  as regras de roteamento, não protege dado real contra um usuário que edite o próprio cookie.
+- **Regras**: `cliente` só acessa a empresa vinculada a ele (empresa, diagnósticos, Data Room, atas,
+  indicadores); `admin` e `consultor` veem tudo; só `admin` acessa `/usuarios`. Aplicadas em duas
+  camadas — `proxy.ts` (roteamento, sem acesso ao banco) e `lib/access.ts` (dentro de cada
+  página e Server Action, com o dado real do banco).
 
 ## Não implementado de propósito
 
-- **Login / autenticação multiusuário** — não construído. O app é single-tenant local; construir
-  auth às pressas cria risco de segurança real, então isso fica para uma etapa dedicada.
+- **Autenticação de produção** — sem hash de senha, sem verificação real de credencial, sem cadastro
+  de usuário. Ver "Login mockado" acima.
 - **Deploy em produção** — o app roda local com SQLite em arquivo. Para produção, troque o
   datasource do Prisma para Postgres (ex.: Vercel Postgres, Supabase, Neon) e hospede em uma
   plataforma como Vercel — requer conta e credenciais do usuário, por isso não foi executado aqui.
