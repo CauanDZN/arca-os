@@ -27,6 +27,7 @@ export function ReportTabs({ sections }: { sections: ReportSection[] }) {
   useEffect(() => {
     const hash = window.location.hash.replace("#", "");
     if (hash && sections.some((s) => s.id === hash)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- recovers the section from a server-redirect hash (window.location), not derived from props
       setActive(hash);
     }
     // only ever run on mount — this recovers the section from a redirect,

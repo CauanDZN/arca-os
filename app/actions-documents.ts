@@ -8,11 +8,8 @@ import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { getAreaByKey } from "@/lib/areas";
 import { redirect } from "next/navigation";
-import fs from "fs/promises";
-import path from "path";
+import { put, del } from "@vercel/blob";
 import crypto from "crypto";
-
-const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
 
 export async function uploadDocument(companyId: string, formData: FormData) {
   assertCompanyAccess(await getSession(), companyId);
@@ -25,15 +22,20 @@ export async function uploadDocument(companyId: string, formData: FormData) {
     redirect(`/empresas/${companyId}/documentos`);
   }
 
-  const companyDir = path.join(UPLOAD_ROOT, companyId);
-  await fs.mkdir(companyDir, { recursive: true });
-
-  const ext = path.extname(file.name);
+  const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
   const storedName = `${crypto.randomUUID()}${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  await fs.writeFile(path.join(companyDir, storedName), buffer);
-
   const mimeType = file.type || "application/octet-stream";
+
+  // Blobs are public-by-URL (Vercel Blob has no private-access tier yet), but
+  // that URL is never shown to the browser directly — the Data Room UI links
+  // to our own /api/documentos/[id] route, which re-checks session/role
+  // before proxying the bytes. Same access-gating as the old local-disk setup.
+  const blob = await put(`${companyId}/${storedName}`, buffer, {
+    access: "public",
+    contentType: mimeType,
+  });
+
   const extractedText = await extractDocumentText(buffer, mimeType);
   const classification = await classifyDocument(file.name, mimeType, extractedText);
 
@@ -42,7 +44,7 @@ export async function uploadDocument(companyId: string, formData: FormData) {
       companyId,
       category,
       originalName: file.name,
-      storedName,
+      storedUrl: blob.url,
       mimeType,
       size: file.size,
       aiSuggestedCategory: classification?.category ?? null,
@@ -77,7 +79,7 @@ export async function deleteDocument(companyId: string, documentId: string) {
 
   const doc = await prisma.document.findUnique({ where: { id: documentId } });
   if (doc && doc.companyId === companyId) {
-    await fs.rm(path.join(UPLOAD_ROOT, companyId, doc.storedName), { force: true });
+    await del(doc.storedUrl);
     await prisma.document.delete({ where: { id: documentId } });
   }
   redirect(`/empresas/${companyId}/documentos`);

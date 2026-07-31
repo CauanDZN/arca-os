@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import fs from "fs/promises";
-import path from "path";
 import { AREAS } from "@/lib/areas";
 import type { Session } from "@/lib/session";
+
+// @vercel/blob makes a real HTTP call to Vercel's storage API and needs
+// BLOB_READ_WRITE_TOKEN — mocked the same way @google/genai is mocked below,
+// to keep the Data Room test hermetic and fast (no real network/credentials).
+const mockBlobPut = vi.hoisted(() => vi.fn());
+const mockBlobDel = vi.hoisted(() => vi.fn());
+vi.mock("@vercel/blob", () => ({
+  put: mockBlobPut,
+  del: mockBlobDel,
+}));
 
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
@@ -48,6 +56,8 @@ beforeEach(() => {
   mockGetSession.mockResolvedValue(ADMIN_SESSION);
   mockSetSessionCookie.mockReset();
   mockClearSessionCookie.mockReset();
+  mockBlobPut.mockReset();
+  mockBlobDel.mockReset();
 });
 
 import { prisma } from "@/lib/prisma";
@@ -401,7 +411,7 @@ describe("approveActionPlan + moveTask (Kanban)", () => {
 });
 
 describe("Data Room (upload/download)", () => {
-  it("uploads a document, persists it on disk and in the database, then deletes both", async () => {
+  it("uploads a document to Blob storage, persists it in the database, then deletes both", async () => {
     const diagnosticId = await createTestCompany("Empresa Integração Data Room");
     const diagnostic = await prisma.diagnostic.findUniqueOrThrow({ where: { id: diagnosticId } });
     const companyId = diagnostic.companyId;
@@ -412,12 +422,22 @@ describe("Data Room (upload/download)", () => {
     fd.set("category", "financeiro");
     fd.set("file", file);
 
+    const fakeBlobUrl = `https://blob.example.com/${companyId}/fake-stored-name.txt`;
+    mockBlobPut.mockResolvedValue({ url: fakeBlobUrl });
+
     const redirectUrl = await expectRedirect(uploadDocument(companyId, fd));
     expect(redirectUrl).toBe(`/empresas/${companyId}/documentos`);
+
+    expect(mockBlobPut).toHaveBeenCalledTimes(1);
+    const [pathname, uploadedBuffer, options] = mockBlobPut.mock.calls[0];
+    expect(pathname).toContain(companyId);
+    expect(Buffer.from(uploadedBuffer).toString("utf-8")).toBe(fileContent);
+    expect(options).toMatchObject({ access: "public", contentType: "text/plain" });
 
     const doc = await prisma.document.findFirstOrThrow({ where: { companyId } });
     expect(doc.originalName).toBe("extrato-teste.txt");
     expect(doc.category).toBe("financeiro");
+    expect(doc.storedUrl).toBe(fakeBlobUrl);
     expect(doc.size).toBe(Buffer.byteLength(fileContent));
     // no GEMINI_API_KEY in the test env — classification must fail gracefully, not throw
     expect(doc.aiSuggestedCategory).toBeNull();
@@ -426,16 +446,11 @@ describe("Data Room (upload/download)", () => {
     // not a crash, even though the document was filed under a specific area
     expect(await prisma.kpiSuggestion.count({ where: { documentId: doc.id } })).toBe(0);
 
-    const filePath = path.join(process.cwd(), "uploads", companyId, doc.storedName);
-    expect(await fs.readFile(filePath, "utf-8")).toBe(fileContent);
-
+    mockBlobDel.mockResolvedValue(undefined);
     await expectRedirect(deleteDocument(companyId, doc.id));
 
+    expect(mockBlobDel).toHaveBeenCalledWith(fakeBlobUrl);
     expect(await prisma.document.findUnique({ where: { id: doc.id } })).toBeNull();
-    await expect(fs.access(filePath)).rejects.toThrow();
-
-    // don't leave test artifacts in the real project's uploads/ directory
-    await fs.rm(path.join(process.cwd(), "uploads", companyId), { recursive: true, force: true });
   });
 });
 
@@ -688,7 +703,7 @@ describe("Agente de Extração de Indicadores (applyKpiSuggestion/rejectKpiSugge
         companyId,
         category: "financeiro",
         originalName: "extrato.pdf",
-        storedName: "fake-stored-name.pdf",
+        storedUrl: "https://blob.example.com/fake-stored-name.pdf",
         mimeType: "application/pdf",
         size: 100,
       },

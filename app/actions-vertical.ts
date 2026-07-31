@@ -8,10 +8,6 @@ import { extractDocumentText } from "@/lib/document-extract";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { redirect } from "next/navigation";
-import fs from "fs/promises";
-import path from "path";
-
-const UPLOAD_ROOT = path.join(process.cwd(), "uploads");
 
 export async function generateVerticalInsightAction(diagnosticId: string, areaKey: string) {
   if (!(VERTICAL_AGENT_AREAS as readonly string[]).includes(areaKey)) {
@@ -50,7 +46,9 @@ export async function generateVerticalInsightAction(diagnosticId: string, areaKe
   const documents: VerticalDocument[] = [];
   for (const doc of companyDocs) {
     try {
-      const buffer = await fs.readFile(path.join(UPLOAD_ROOT, diagnostic.companyId, doc.storedName));
+      const response = await fetch(doc.storedUrl);
+      if (!response.ok) throw new Error(`blob fetch returned ${response.status}`);
+      const buffer = Buffer.from(await response.arrayBuffer());
       const text = await extractDocumentText(buffer, doc.mimeType);
       if (text) documents.push({ name: doc.originalName, text });
     } catch (error) {

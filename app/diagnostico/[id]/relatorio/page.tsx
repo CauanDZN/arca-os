@@ -393,7 +393,7 @@ export default async function RelatorioPage({
               <span>
                 <span className="font-semibold">Agente de Auditoria de Evidências:</span>{" "}
                 {evidenceGaps.length} {evidenceGaps.length === 1 ? "resposta crítica está" : "respostas críticas estão"}{" "}
-                sem evidência anexada — veja marcadas em "Diagnóstico".
+                sem evidência anexada — veja marcadas em &ldquo;Diagnóstico&rdquo;.
               </span>
             </p>
           </div>

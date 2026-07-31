@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model Company {
@@ -137,7 +137,7 @@ model Document {
   company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   category            String // area key or "geral"
   originalName        String
-  storedName          String
+  storedUrl           String // URL do blob no Vercel Blob (era um filename local antes da migração pra Postgres+Blob)
   mimeType            String
   size                Int
   aiSuggestedCategory String? // free-form document type guessed by the Classificador de Documentos agent
