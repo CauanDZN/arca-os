@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaByKey, getAreaIndex } from "@/lib/areas";
+import { getVerticalByKey } from "@/lib/verticals";
 import { saveAreaAnswers } from "@/app/actions";
 import { IMPACT_OPTIONS, URGENCY_OPTIONS, RISK_OPTIONS } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
@@ -49,21 +50,43 @@ export default async function QuestionarioAreaPage({
     existingAnswers.map((a: ExistingAnswer) => [a.questionId, a])
   );
 
+  // Diagnóstico de módulo/vertical (Arca Checkup por vertical, ver
+  // app/actions-module.ts): navega pelas áreas DA VERTICAL (1 a N, ver
+  // lib/verticals.ts) — Financeiro tem 1 área só, Comercial tem 3.
+  const isVerticalModule = diagnostic.scope !== "completo";
+  const vertical = isVerticalModule ? getVerticalByKey(diagnostic.scope) : null;
+  if (isVerticalModule && !vertical) notFound();
+  const verticalAreaIndex = vertical ? vertical.areaKeys.indexOf(areaKey) : -1;
+
   const areaIndex = getAreaIndex(areaKey);
-  const isLast = areaIndex === AREAS.length - 1;
+  const isLast = vertical
+    ? verticalAreaIndex === vertical.areaKeys.length - 1
+    : areaIndex === AREAS.length - 1;
   const action = saveAreaAnswers.bind(null, id, areaKey);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
       <div className="mx-auto max-w-3xl">
-        <ProgressBar current={areaIndex + 1} total={AREAS.length} />
+        {vertical ? (
+          vertical.areaKeys.length > 1 && (
+            <ProgressBar current={verticalAreaIndex + 1} total={vertical.areaKeys.length} />
+          )
+        ) : (
+          <ProgressBar current={areaIndex + 1} total={AREAS.length} />
+        )}
 
         <form
           action={action}
           className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-8 mt-4"
         >
           <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
-            Área {areaIndex + 1} de {AREAS.length}
+            {vertical
+              ? `Arca Checkup · ${vertical.name}${
+                  vertical.areaKeys.length > 1
+                    ? ` · Área ${verticalAreaIndex + 1} de ${vertical.areaKeys.length}`
+                    : " · Nível 1 de 4 — Diagnóstico"
+                }`
+              : `Área ${areaIndex + 1} de ${AREAS.length}`}
           </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-1">
             {area.name}
@@ -125,7 +148,18 @@ export default async function QuestionarioAreaPage({
           </div>
 
           <div className="mt-8 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {areaIndex > 0 ? (
+            {vertical ? (
+              verticalAreaIndex > 0 ? (
+                <Link
+                  href={`/diagnostico/${id}/questionario/${vertical.areaKeys[verticalAreaIndex - 1]}`}
+                  className="text-slate-600 font-medium hover:text-slate-900 text-center sm:text-left"
+                >
+                  ← Área anterior
+                </Link>
+              ) : (
+                <span />
+              )
+            ) : areaIndex > 0 ? (
               <Link
                 href={`/diagnostico/${id}/questionario/${AREAS[areaIndex - 1].key}`}
                 className="text-slate-600 font-medium hover:text-slate-900 text-center sm:text-left"

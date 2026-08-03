@@ -107,19 +107,19 @@ function classify(areaKey: string, avg: number): PriorityItem["classification"] 
   return "Estratégica";
 }
 
-function timeframeForScore(avg: number): ActionItem["timeframe"] {
+export function timeframeForScore(avg: number): ActionItem["timeframe"] {
   if (avg < 2) return "30 dias";
   if (avg < 3.5) return "31 a 90 dias";
   return "3 a 12 meses";
 }
 
-function priorityForScore(avg: number): ActionItem["priority"] {
+export function priorityForScore(avg: number): ActionItem["priority"] {
   if (avg < 2) return "Alta";
   if (avg < 3.5) return "Média";
   return "Baixa";
 }
 
-function actionTextFor(questionText: string): string {
+export function actionTextFor(questionText: string): string {
   const stripped = questionText.replace(/\?$/, "");
   return `Estruturar: ${stripped}`;
 }

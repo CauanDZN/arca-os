@@ -71,6 +71,28 @@ export const messageSchema = z.object({
   body: z.string().trim().min(1, "Escreva a mensagem.").max(2000),
 });
 
+export const onboardingResponsibleSchema = z.object({
+  onboardingResponsible: z.string().trim().max(120).default(""),
+});
+
+export const omieCredentialsSchema = z.object({
+  omieAppKey: z.string().trim().min(1, "Informe a App Key da Omie.").max(60),
+  omieAppSecret: z.string().trim().min(1, "Informe o App Secret da Omie.").max(60),
+});
+
+// Revisão humana da narrativa de IA antes da aprovação do plano — o sumário é
+// um campo só, os insights por área chegam como arrays paralelos (areaKey[],
+// causaRaiz[], recomendacao[]) porque o form tem um bloco repetido por área.
+export const narrativeEditSchema = z.object({
+  executiveSummary: z.string().trim().min(1, "Escreva o sumário executivo.").max(2000),
+});
+
+export const narrativeAreaInsightSchema = z.object({
+  areaKey: z.string().trim().min(1),
+  causaRaiz: z.string().trim().max(600).default(""),
+  recomendacao: z.string().trim().max(600).default(""),
+});
+
 export const sprintSchema = z
   .object({
     name: z.string().trim().min(1, "Dê um nome ao sprint.").max(120),
@@ -117,16 +139,19 @@ export const kpiEntrySchema = z.object({
 
 export const USER_ROLES = ["admin", "consultor", "cliente"] as const;
 
+// FormData.get() devolve null (não undefined) pra uma chave ausente — o que
+// escapa do .default("") do zod, que só cobre undefined. Normaliza null/
+// undefined pra "" antes da validação de string, tanto pro formulário real
+// (que sempre manda os dois campos, mesmo vazios) quanto pra uma chamada
+// direta da Server Action que omita o campo.
+const optionalTrimmedString = (max: number) =>
+  z.preprocess((v) => (v === null || v === undefined ? "" : v), z.string().trim().max(max));
+
 export const userSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome.").max(120),
   email: z.string().trim().email("E-mail inválido").max(160),
   password: z.string().min(6, "A senha deve ter ao menos 6 caracteres.").max(120),
   role: z.enum(USER_ROLES),
-  title: z.string().trim().max(120).default(""),
-  companyId: z
-    .string()
-    .trim()
-    .max(120)
-    .default("")
-    .transform((v) => (v === "" ? null : v)),
+  title: optionalTrimmedString(120),
+  companyId: optionalTrimmedString(120).transform((v) => (v === "" ? null : v)),
 });

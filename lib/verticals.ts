@@ -64,6 +64,10 @@ export function verticalForArea(areaKey: string): Vertical | undefined {
   return VERTICALS.find((v) => v.areaKeys.includes(areaKey));
 }
 
+export function getVerticalByKey(key: string): Vertical | undefined {
+  return VERTICALS.find((v) => v.key === key);
+}
+
 export type VerticalAverage = {
   key: string;
   name: string;

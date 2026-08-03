@@ -15,6 +15,11 @@ export default defineConfig({
   test: {
     environment: "node",
     fileParallelism: false,
+    // Docker Desktop no Windows (WSL2) é sensivelmente mais lento em I/O de
+    // Postgres do que um Postgres nativo Linux — o default de 5s do Vitest
+    // estoura em operações com cascade grande (ex.: deleteCompany) mesmo sem
+    // nenhum bug de lógica.
+    testTimeout: 15000,
     globalSetup: "./test/setup-db.ts",
     env: {
       DATABASE_URL: TEST_DATABASE_URL || "",

@@ -6,12 +6,16 @@ import { buildReport } from "@/lib/scoring";
 import { statusTone } from "@/lib/badge-tones";
 import type { MeetingMinutes } from "@/lib/ai";
 import { findAtRiskTasks } from "@/lib/pmo";
+import { buildOnboardingChecklist } from "@/lib/onboarding";
+import { VERTICALS } from "@/lib/verticals";
 import { getSession } from "@/lib/auth";
-import { deleteCompany } from "@/app/actions-empresas";
+import { deleteCompany, updateOnboardingResponsible, updateContractedVerticals } from "@/app/actions-empresas";
+import { saveOmieCredentials, disconnectOmie, syncOmieFinancials } from "@/app/actions-omie";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ConfirmButton } from "@/app/components/ConfirmButton";
 import { ScoreBar } from "@/app/components/ScoreBar";
+import { SubmitButton } from "@/app/components/SubmitButton";
 import {
   FolderIcon,
   TrendingUpIcon,
@@ -22,12 +26,25 @@ import {
   PlayCircleIcon,
 } from "@/app/components/icons";
 
+const OMIE_ERROR_MESSAGE: Record<string, string> = {
+  "omie-validacao": "Informe a App Key e o App Secret da Omie.",
+  "omie-credenciais": "Não foi possível conectar à Omie com essas credenciais — confira App Key e App Secret.",
+  "omie-desconectado": "Conecte a Omie antes de sincronizar.",
+};
+
+const OMIE_SUCCESS_MESSAGE: Record<string, string> = {
+  "omie-conectado": "Conectado à Omie com sucesso.",
+};
+
 export default async function EmpresaDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; sucesso?: string }>;
 }) {
   const { id } = await params;
+  const { error, sucesso } = await searchParams;
 
   const session = await getSession();
 
@@ -45,6 +62,19 @@ export default async function EmpresaDetailPage({
   if (!company) notFound();
 
   const totalDocuments = await prisma.document.count({ where: { companyId: id } });
+
+  const onboardingItems = buildOnboardingChecklist({
+    onboardingResponsible: company.onboardingResponsible,
+    documentCount: totalDocuments,
+    diagnosticCount: company.diagnostics.length,
+    hasCompletedDiagnostic: company.diagnostics.some(
+      (d) => d.status === "concluido" || d.status === "em_execucao"
+    ),
+  });
+  const onboardingDone = onboardingItems.filter((i) => i.done).length;
+
+  const contractedVerticalKeys: string[] = JSON.parse(company.contractedVerticals || "[]");
+  const contractedVerticals = VERTICALS.filter((v) => contractedVerticalKeys.includes(v.key));
 
   const diagnosticsWithScore = company.diagnostics.map((d) => {
     const report = buildReport(
@@ -127,6 +157,16 @@ export default async function EmpresaDetailPage({
               <TrendingUpIcon className="w-4 h-4" />
               Indicadores
             </Link>
+            {contractedVerticals.map((v) => (
+              <Link
+                key={v.key}
+                href={`/empresas/${id}/modulo/${v.key}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <TrendingUpIcon className="w-4 h-4" />
+                Módulo {v.name}
+              </Link>
+            ))}
             <Link
               href={`/portal/${id}`}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
@@ -142,6 +182,149 @@ export default async function EmpresaDetailPage({
             </Link>
           </div>
         </Card>
+
+        {session?.role !== "cliente" && (
+          <Card>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="font-semibold text-slate-900">Onboarding</h2>
+              <Badge
+                text={`${onboardingDone}/${onboardingItems.length}`}
+                tone={onboardingDone === onboardingItems.length ? "good" : "warning"}
+              />
+            </div>
+            <ul className="space-y-1.5 mb-4">
+              {onboardingItems.map((item) => (
+                <li key={item.key} className="flex items-center gap-2 text-sm">
+                  <span className={item.done ? "text-green-600" : "text-slate-300"}>
+                    {item.done ? "✓" : "○"}
+                  </span>
+                  <span className={item.done ? "text-slate-700" : "text-slate-400"}>{item.label}</span>
+                </li>
+              ))}
+            </ul>
+            <form action={updateOnboardingResponsible.bind(null, id)} className="flex flex-col sm:flex-row gap-2">
+              <input
+                name="onboardingResponsible"
+                defaultValue={company.onboardingResponsible}
+                placeholder="Responsável Arca por essa empresa"
+                maxLength={120}
+                className="flex-1 rounded-md border border-slate-300 px-2.5 py-2 text-sm"
+              />
+              <SubmitButton
+                pendingText="Salvando..."
+                className="rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold px-4 py-2 hover:bg-slate-100 transition-colors"
+              >
+                Salvar
+              </SubmitButton>
+            </form>
+          </Card>
+        )}
+
+        {(error && OMIE_ERROR_MESSAGE[error] || sucesso && OMIE_SUCCESS_MESSAGE[sucesso]) && (
+          <p
+            className={
+              error
+                ? "text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
+                : "text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2"
+            }
+          >
+            {error ? OMIE_ERROR_MESSAGE[error] : OMIE_SUCCESS_MESSAGE[sucesso!]}
+          </p>
+        )}
+
+        {session?.role !== "cliente" && (
+          <Card>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="font-semibold text-slate-900">Integração com a Omie</h2>
+              <Badge text={company.omieAppKey ? "Conectado" : "Não conectado"} tone={company.omieAppKey ? "good" : "neutral"} />
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Traz contas a pagar/receber da Omie e alimenta os indicadores &quot;Inadimplência&quot; e
+              &quot;Endividamento&quot; do Cockpit de Performance automaticamente, sem digitação manual.
+            </p>
+            {company.omieAppKey ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <form action={syncOmieFinancials.bind(null, id)}>
+                  <SubmitButton
+                    pendingText="Sincronizando..."
+                    className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                  >
+                    Sincronizar agora
+                  </SubmitButton>
+                </form>
+                <form action={disconnectOmie.bind(null, id)}>
+                  <ConfirmButton
+                    confirmText="Desconectar a Omie desta empresa? A sincronização automática para de funcionar."
+                    pendingText="Desconectando..."
+                    className="rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold px-4 py-2 hover:bg-slate-100 transition-colors"
+                  >
+                    Desconectar
+                  </ConfirmButton>
+                </form>
+              </div>
+            ) : (
+              <form action={saveOmieCredentials.bind(null, id)} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  name="omieAppKey"
+                  placeholder="App Key"
+                  required
+                  className="rounded-md border border-slate-300 px-2.5 py-2 text-sm"
+                />
+                <input
+                  name="omieAppSecret"
+                  placeholder="App Secret"
+                  required
+                  type="password"
+                  className="rounded-md border border-slate-300 px-2.5 py-2 text-sm"
+                />
+                <SubmitButton
+                  pendingText="Conectando..."
+                  className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors sm:col-span-2 self-start"
+                >
+                  Conectar à Omie
+                </SubmitButton>
+              </form>
+            )}
+          </Card>
+        )}
+
+        {session?.role !== "cliente" && (
+          <Card>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="font-semibold text-slate-900">Verticais contratadas</h2>
+              <Badge text={`${contractedVerticals.length}/${VERTICALS.length}`} tone="managed" />
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Cada vertical marcada vira um módulo independente (Arca Checkup) pra essa empresa —
+              diagnóstico, Data Room e relatório próprios, sem exigir as demais.
+            </p>
+            <form action={updateContractedVerticals.bind(null, id)} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {VERTICALS.map((v) => (
+                  <label key={v.key} className="flex items-start gap-2 text-sm rounded-lg border border-slate-200 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      name="verticals"
+                      value={v.key}
+                      defaultChecked={contractedVerticalKeys.includes(v.key)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium text-slate-800">{v.name}</span>
+                      <span className="block text-xs text-slate-500">{v.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <SubmitButton
+                pendingText="Salvando..."
+                className="rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold px-4 py-2 hover:bg-slate-100 transition-colors"
+              >
+                Salvar verticais contratadas
+              </SubmitButton>
+            </form>
+          </Card>
+        )}
 
         {diagnosticsWithScore.length > 1 && (
           <Card>

@@ -47,7 +47,7 @@ const GROUPS: AgentGroup[] = [
       {
         name: "Classificador de documentos do Data Room",
         description:
-          "Lê o conteúdo de PDFs e arquivos de texto enviados e sugere o tipo do documento (extrato, DRE, contrato, nota fiscal...) com um nível de confiança — quando o formato não pode ser lido (imagem, planilha), classifica só pelo nome do arquivo e marca confiança baixa (via Gemini).",
+          "Lê o conteúdo de PDFs e arquivos de texto enviados e sugere o tipo do documento (extrato, DRE, contrato, nota fiscal...) com um nível de confiança. Foto e PDF escaneado agora são lidos por OCR direto no Gemini (multimodal) — só quando o formato realmente não dá pra ler (planilha, Office) classifica pelo nome do arquivo e marca confiança baixa.",
         status: "ativo",
         requiresGemini: true,
         seeItAt: { href: "/empresas", label: "Ver no Data Room de uma empresa" },
@@ -59,6 +59,14 @@ const GROUPS: AgentGroup[] = [
         status: "ativo",
         requiresGemini: true,
         seeItAt: { href: "/empresas", label: "Ver em Atas de Reunião de uma empresa" },
+      },
+      {
+        name: "Agente de Extração Financeira",
+        description:
+          "Sob demanda (botão \"Analisar transações\"), lê um extrato bancário classificado no Data Room — texto ou OCR direto na imagem/PDF — e extrai cada transação com data, valor e categoria (fornecedor, imposto, despesa pessoal, empréstimo), sinalizando o que parece inconsistente. Fica pendente até um humano confirmar ou rejeitar, transação por transação (via Gemini).",
+        status: "ativo",
+        requiresGemini: true,
+        seeItAt: { href: "/empresas", label: "Ver no Data Room de uma empresa" },
       },
     ],
   },
@@ -136,6 +144,34 @@ const GROUPS: AgentGroup[] = [
           "Varre todas as empresas da plataforma (não uma só) atrás de lacuna estrutural — diagnóstico concluído sem nenhuma evidência, notas todas zeradas (indício de dado de teste), ações em massa sem responsável — regra de negócio, roda em toda visita à central de relatórios.",
         status: "ativo",
         seeItAt: { href: "/relatorios", label: "Ver em Relatórios" },
+      },
+      {
+        name: "Agente de Risco Fiscal",
+        description:
+          "Sinaliza nota crítica/frágil nas perguntas fiscais que indicam exposição concreta — débito em aberto, certidão vencida, classificação incorreta, passivo não mapeado — regra de negócio, roda em toda geração de relatório.",
+        status: "ativo",
+        seeItAt: { href: "/relatorios", label: "Ver no relatório" },
+      },
+      {
+        name: "Agente de Risco Trabalhista",
+        description:
+          "Mesma lógica nas perguntas de Pessoas e Jurídico que apontam exposição trabalhista direta — regra de negócio, roda em toda geração de relatório.",
+        status: "ativo",
+        seeItAt: { href: "/relatorios", label: "Ver no relatório" },
+      },
+      {
+        name: "Agente de Conformidade Contratual",
+        description:
+          "Verifica as perguntas jurídicas sobre contratos, licenças e exposição a multas/processos — regra de negócio, roda em toda geração de relatório.",
+        status: "ativo",
+        seeItAt: { href: "/relatorios", label: "Ver no relatório" },
+      },
+      {
+        name: "Agente LGPD",
+        description:
+          "Cruza a pergunta jurídica sobre política de proteção de dados com documentos sensíveis (folha de pagamento) já no Data Room — não há registro de consentimento na plataforma, então o agente sinaliza pra confirmação manual em vez de presumir conformidade — regra de negócio, roda em toda geração de relatório.",
+        status: "ativo",
+        seeItAt: { href: "/relatorios", label: "Ver no relatório" },
       },
     ],
   },

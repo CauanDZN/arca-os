@@ -51,12 +51,20 @@ const INTEGRATIONS: Integration[] = [
     ctaLabel: "Configurar",
   },
   {
-    name: "ERP",
-    description: "Sincronização de financeiro, estoque e faturamento.",
+    name: "Omie",
+    description:
+      "Conector dedicado: traz contas a pagar/receber da Omie e alimenta automaticamente os indicadores Inadimplência e Endividamento do Cockpit de Performance.",
+    category: "Sistemas de gestão",
+    status: "disponivel",
+    ctaLabel: "Conectar",
+  },
+  {
+    name: "ERP (outros)",
+    description: "Sincronização de financeiro, estoque e faturamento pra ERPs sem conector dedicado.",
     category: "Sistemas de gestão",
     status: "workaround",
     workaround:
-      "Sem conector dedicado pra um ERP específico, mas o ERP pode apontar seu webhook de eventos pra URL da empresa (veja \"Webhook\" acima) — ou exporte um relatório em PDF/CSV e envie pelo Data Room, que o Classificador e o Agente de Diagnóstico Vertical já leem.",
+      "Sem conector dedicado fora da Omie, mas o ERP pode apontar seu webhook de eventos pra URL da empresa (veja \"Webhook\" acima) — ou exporte um relatório em PDF/CSV e envie pelo Data Room, que o Classificador e o Agente de Diagnóstico Vertical já leem.",
   },
   {
     name: "CRM",

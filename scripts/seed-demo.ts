@@ -4,9 +4,13 @@
 // runtime — run manually with `npx tsx scripts/seed-demo.ts`.
 import { config } from "dotenv";
 config({ path: ".env" });
-config({ path: ".env.local" });
+config({ path: ".env.local", override: true });
 
-import { prisma } from "../lib/prisma";
+// import { prisma } from "../lib/prisma" tem que vir depois do dotenv.config
+// acima, mas import declarations em ESM são hoisted pro topo do módulo — o
+// require de lib/prisma.ts (e a leitura de DATABASE_URL nele) rodaria antes
+// do config() de qualquer jeito. Import dinâmico dentro de main() resolve,
+// porque aí é uma expressão avaliada na ordem real do código.
 import { AREAS } from "../lib/areas";
 import { buildReport, type ActionItem } from "../lib/scoring";
 import { generateAiNarrative } from "../lib/ai";
@@ -64,12 +68,15 @@ function scoresForArea(questionCount: number, target: number): number[] {
   );
 }
 
-async function createDiagnostic(opts: {
-  companyId: string;
-  createdAt: Date;
-  targets: Record<string, number>;
-  withEvidence: boolean;
-}) {
+async function createDiagnostic(
+  prisma: (typeof import("../lib/prisma"))["prisma"],
+  opts: {
+    companyId: string;
+    createdAt: Date;
+    targets: Record<string, number>;
+    withEvidence: boolean;
+  }
+) {
   const diagnostic = await prisma.diagnostic.create({
     data: { companyId: opts.companyId, status: "concluido", createdAt: opts.createdAt },
   });
@@ -100,6 +107,8 @@ async function createDiagnostic(opts: {
 }
 
 async function main() {
+  const { prisma } = await import("../lib/prisma");
+
   const company = await prisma.company.create({
     data: {
       name: "Ótica Visão Clara",
@@ -117,14 +126,14 @@ async function main() {
     },
   });
 
-  const before = await createDiagnostic({
+  const before = await createDiagnostic(prisma, {
     companyId: company.id,
     createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
     targets: AREA_TARGETS_BEFORE,
     withEvidence: true,
   });
 
-  const after = await createDiagnostic({
+  const after = await createDiagnostic(prisma, {
     companyId: company.id,
     createdAt: new Date(),
     targets: AREA_TARGETS_AFTER,
@@ -183,13 +192,11 @@ async function main() {
   console.log(`Diagnóstico "depois": http://localhost:3000/diagnostico/${after.id}/relatorio`);
   console.log(`Projeto (Kanban):     http://localhost:3000/diagnostico/${after.id}/projeto`);
   console.log(`Cockpit da empresa:   http://localhost:3000/empresas/${company.id}`);
+
+  await prisma.$disconnect();
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

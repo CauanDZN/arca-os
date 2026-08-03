@@ -1,7 +1,28 @@
 import { describe, it, expect } from "vitest";
+import React from "react";
+import { Document, Page, Text, renderToBuffer } from "@react-pdf/renderer";
 import { extractDocumentText } from "@/lib/document-extract";
 
 describe("extractDocumentText", () => {
+  // Regressão do crash "ReferenceError: DOMMatrix is not defined" em
+  // produção (pdfjs-dist, dependência do pdf-parse, sem @napi-rs/canvas
+  // instalado pro polyfill) — só pega esse caminho de verdade com um PDF
+  // real, não com texto/xml.
+  it("reads a real PDF without crashing on DOMMatrix", async () => {
+    const buffer = await renderToBuffer(
+      React.createElement(
+        Document,
+        null,
+        React.createElement(
+          Page,
+          null,
+          React.createElement(Text, null, "conteudo de teste do pdf")
+        )
+      )
+    );
+    const result = await extractDocumentText(buffer, "application/pdf");
+    expect(result).toContain("conteudo de teste do pdf");
+  });
   it("reads plain text files", async () => {
     const result = await extractDocumentText(Buffer.from("extrato bancário de teste"), "text/plain");
     expect(result).toBe("extrato bancário de teste");

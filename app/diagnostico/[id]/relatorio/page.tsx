@@ -4,13 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { buildReport, type AreaScore } from "@/lib/scoring";
 import type { AiNarrative, VerticalInsight } from "@/lib/ai";
 import { findEvidenceGaps } from "@/lib/audit";
+import { checkFiscalRisk, checkLaborRisk, checkContractCompliance, checkLgpdCompliance } from "@/lib/governance";
 import { statusTone, classificationTone, priorityTone, maturityTone } from "@/lib/badge-tones";
 import { getAreaByKey, VERTICAL_AGENT_AREAS } from "@/lib/areas";
 import { verticalAverages } from "@/lib/verticals";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { PrintButton } from "./PrintButton";
-import { generateNarrativeAction } from "@/app/actions";
+import { generateNarrativeAction, updateNarrativeAction } from "@/app/actions";
 import { approveActionPlan } from "@/app/actions-project";
 import { generateVerticalInsightAction } from "@/app/actions-vertical";
 import { Card } from "@/app/components/Card";
@@ -30,7 +31,12 @@ export default async function RelatorioPage({
 
   const diagnostic = await prisma.diagnostic.findUnique({
     where: { id },
-    include: { company: true, answers: true, tasks: true, verticalInsights: true },
+    include: {
+      company: { include: { documents: true } },
+      answers: true,
+      tasks: true,
+      verticalInsights: true,
+    },
   });
   if (!diagnostic) notFound();
   assertCompanyAccess(await getSession(), diagnostic.companyId);
@@ -49,8 +55,20 @@ export default async function RelatorioPage({
   const aiInsightByArea = new Map(
     (aiNarrative?.areaInsights ?? []).map((i) => [i.areaKey, i])
   );
+  const planAlreadyApproved = diagnostic.tasks.length > 0;
   const evidenceGaps = findEvidenceGaps(diagnostic.answers);
   const missingEvidence = new Set(evidenceGaps.map((g) => `${g.areaKey}::${g.questionText}`));
+
+  const governanceAnswers = diagnostic.answers.map((a) => ({ areaKey: a.areaKey, questionId: a.questionId, score: a.score }));
+  const governanceAlerts = [
+    ...checkFiscalRisk(governanceAnswers).map((a) => ({ agent: "Agente de Risco Fiscal", ...a })),
+    ...checkLaborRisk(governanceAnswers).map((a) => ({ agent: "Agente de Risco Trabalhista", ...a })),
+    ...checkContractCompliance(governanceAnswers).map((a) => ({ agent: "Agente de Conformidade Contratual", ...a })),
+  ];
+  const lgpdAlerts = checkLgpdCompliance(
+    governanceAnswers,
+    diagnostic.company.documents.map((d) => ({ aiSuggestedCategory: d.aiSuggestedCategory }))
+  );
   const areasWithGaps = report.areaScores.filter((a) => a.weakestQuestions.length > 0);
 
   const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
@@ -114,6 +132,68 @@ export default async function RelatorioPage({
                 Análise consultiva · Gerado por IA
               </p>
               <p className="text-sm text-slate-800 leading-relaxed">{aiNarrative.executiveSummary}</p>
+
+              <details className="mt-3 print:hidden">
+                <summary className="cursor-pointer select-none text-xs font-medium text-blue-700 hover:underline">
+                  Revisar / editar análise consultiva
+                </summary>
+                <div className="mt-3 space-y-3 border-t border-blue-100 pt-3">
+                  {planAlreadyApproved && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      O plano já foi aprovado — editar aqui atualiza o relatório, mas não muda a causa
+                      raiz já copiada pras tarefas criadas.
+                    </p>
+                  )}
+                  <form action={updateNarrativeAction.bind(null, id)} className="space-y-3">
+                    <label className="block">
+                      <span className="block text-xs font-medium text-slate-600 mb-1">Sumário executivo</span>
+                      <textarea
+                        name="executiveSummary"
+                        defaultValue={aiNarrative.executiveSummary}
+                        rows={3}
+                        maxLength={2000}
+                        className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm"
+                      />
+                    </label>
+                    {aiNarrative.areaInsights.map((insight) => (
+                      <div key={insight.areaKey} className="rounded-lg border border-slate-200 p-3">
+                        <input type="hidden" name="areaKey" value={insight.areaKey} />
+                        <p className="text-xs font-semibold text-slate-700 mb-2">
+                          {getAreaByKey(insight.areaKey)?.name ?? insight.areaKey}
+                        </p>
+                        <label className="block mb-2">
+                          <span className="block text-xs font-medium text-slate-500 mb-1">Causa raiz</span>
+                          <textarea
+                            name="causaRaiz"
+                            defaultValue={insight.causaRaiz}
+                            rows={2}
+                            maxLength={600}
+                            className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="block text-xs font-medium text-slate-500 mb-1">
+                            Recomendação da Arca
+                          </span>
+                          <textarea
+                            name="recomendacao"
+                            defaultValue={insight.recomendacao}
+                            rows={2}
+                            maxLength={600}
+                            className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm"
+                          />
+                        </label>
+                      </div>
+                    ))}
+                    <SubmitButton
+                      pendingText="Salvando..."
+                      className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                    >
+                      Salvar revisão
+                    </SubmitButton>
+                  </form>
+                </div>
+              </details>
             </div>
           ) : hasGeminiKey ? (
             <div className="mb-6 rounded-xl border border-blue-200 bg-white p-4">
@@ -449,6 +529,37 @@ export default async function RelatorioPage({
                 sem evidência anexada — veja marcadas em &ldquo;Diagnóstico&rdquo;.
               </span>
             </p>
+          </div>
+        )}
+
+        {(governanceAlerts.length > 0 || lgpdAlerts.length > 0) && (
+          <div className="rounded-2xl bg-red-50 border border-red-200 p-4 print:hidden">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-red-900 mb-2">
+              <SparklesIcon className="w-4 h-4 shrink-0" />
+              Agentes de Governança e Qualidade
+            </p>
+            <ul className="space-y-1 text-sm text-red-900">
+              {governanceAlerts.map((a, i) => (
+                <li key={`gov-${i}`}>
+                  <span className="font-medium">{a.agent}:</span> {a.questionText} (nota {a.score}) —{" "}
+                  {a.areaName}
+                </li>
+              ))}
+              {lgpdAlerts.map((a, i) =>
+                a.type === "sem_politica" ? (
+                  <li key={`lgpd-${i}`}>
+                    <span className="font-medium">Agente LGPD:</span> {a.questionText} (nota {a.score}) —{" "}
+                    {a.areaName}
+                  </li>
+                ) : (
+                  <li key={`lgpd-${i}`}>
+                    <span className="font-medium">Agente LGPD:</span> {a.documentCount}{" "}
+                    {a.documentCount === 1 ? "documento sensível" : "documentos sensíveis"} (folha de
+                    pagamento) no Data Room — confirme a base legal/consentimento antes de compartilhar.
+                  </li>
+                )
+              )}
+            </ul>
           </div>
         )}
 

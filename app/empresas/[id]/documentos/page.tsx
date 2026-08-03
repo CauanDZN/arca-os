@@ -2,7 +2,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AREAS } from "@/lib/areas";
-import { uploadDocument, deleteDocument } from "@/app/actions-documents";
+import {
+  uploadDocument,
+  deleteDocument,
+  extractFinancialTransactionsAction,
+  confirmDocumentTransaction,
+  rejectDocumentTransaction,
+} from "@/app/actions-documents";
 import {
   generateWebhookToken,
   revokeWebhookToken,
@@ -32,11 +38,22 @@ export default async function DocumentosPage({
   const company = await prisma.company.findUnique({
     where: { id },
     include: {
-      documents: { orderBy: { createdAt: "desc" } },
+      documents: {
+        orderBy: { createdAt: "desc" },
+        include: { transactions: { orderBy: { date: "asc" } } },
+      },
       webhookEvents: { orderBy: { receivedAt: "desc" }, take: 20 },
     },
   });
   if (!company) notFound();
+
+  const TRANSACTION_CATEGORY_LABEL: Record<string, string> = {
+    fornecedor: "Fornecedor",
+    imposto: "Imposto",
+    despesa_pessoal: "Despesa pessoal",
+    emprestimo: "Empréstimo",
+    outro: "Outro",
+  };
 
   const categories = [{ key: "geral", name: "Geral" }, ...AREAS.map((a) => ({ key: a.key, name: a.name }))];
   const uploadAction = uploadDocument.bind(null, id);
@@ -208,38 +225,149 @@ export default async function DocumentosPage({
                   {grouped.get(c.key)!.map((doc) => (
                     <li
                       key={doc.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:border-slate-300 transition-colors"
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:border-slate-300 transition-colors"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <DocumentIcon className="w-4 h-4 text-slate-400 shrink-0" />
-                        <div className="min-w-0">
-                          <a
-                            href={`/api/documentos/${doc.id}`}
-                            className="font-medium text-blue-700 hover:underline truncate block"
-                          >
-                            {doc.originalName}
-                          </a>
-                          <span className="text-xs text-slate-400">
-                            {formatSize(doc.size)} · {new Date(doc.createdAt).toLocaleDateString("pt-BR")}
-                          </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <DocumentIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                          <div className="min-w-0">
+                            <a
+                              href={`/api/documentos/${doc.id}`}
+                              className="font-medium text-blue-700 hover:underline truncate block"
+                            >
+                              {doc.originalName}
+                            </a>
+                            <span className="text-xs text-slate-400">
+                              {formatSize(doc.size)} · {new Date(doc.createdAt).toLocaleDateString("pt-BR")}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          {doc.aiSuggestedCategory && (
+                            <Badge
+                              text={`IA: ${doc.aiSuggestedCategory} · confiança ${doc.aiConfidence}`}
+                              tone={doc.aiConfidence === "alta" ? "good" : "neutral"}
+                            />
+                          )}
+                          {doc.aiSuggestedCategory === "Extrato bancário" && (
+                            <form action={extractFinancialTransactionsAction.bind(null, id, doc.id)}>
+                              <SubmitButton
+                                pendingText="Analisando..."
+                                className="text-xs font-semibold text-blue-700 hover:underline disabled:no-underline"
+                              >
+                                {doc.transactions.length > 0 ? "Reanalisar transações" : "Analisar transações (IA)"}
+                              </SubmitButton>
+                            </form>
+                          )}
+                          <form action={deleteDocument.bind(null, id, doc.id)}>
+                            <SubmitButton
+                              pendingText="Removendo..."
+                              className="text-xs text-red-600 hover:underline whitespace-nowrap disabled:no-underline"
+                            >
+                              Remover
+                            </SubmitButton>
+                          </form>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        {doc.aiSuggestedCategory && (
-                          <Badge
-                            text={`IA: ${doc.aiSuggestedCategory} · confiança ${doc.aiConfidence}`}
-                            tone={doc.aiConfidence === "alta" ? "good" : "neutral"}
-                          />
-                        )}
-                        <form action={deleteDocument.bind(null, id, doc.id)}>
-                          <SubmitButton
-                            pendingText="Removendo..."
-                            className="text-xs text-red-600 hover:underline whitespace-nowrap disabled:no-underline"
-                          >
-                            Remover
-                          </SubmitButton>
-                        </form>
-                      </div>
+
+                      {doc.transactions.length > 0 && (
+                        <details className="mt-2.5 pt-2.5 border-t border-slate-100">
+                          <summary className="cursor-pointer select-none text-xs font-medium text-blue-700 hover:underline">
+                            Agente de Extração Financeira · {doc.transactions.length} transaç
+                            {doc.transactions.length === 1 ? "ão" : "ões"}
+                            {doc.transactions.some((t) => t.flagged) && (
+                              <span className="ml-1.5 text-amber-700">
+                                {" "}
+                                ·{" "}
+                                {doc.transactions.filter((t) => t.flagged).length} sinalizada
+                                {doc.transactions.filter((t) => t.flagged).length === 1 ? "" : "s"}
+                              </span>
+                            )}
+                          </summary>
+                          <div className="mt-2 overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-left text-slate-500 border-b border-slate-200">
+                                  <th className="py-1.5 pr-3">Data</th>
+                                  <th className="py-1.5 pr-3">Descrição</th>
+                                  <th className="py-1.5 pr-3">Valor</th>
+                                  <th className="py-1.5 pr-3">Categoria</th>
+                                  <th className="py-1.5 pr-3">Status</th>
+                                  <th className="py-1.5" />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {doc.transactions.map((t) => (
+                                  <tr key={t.id} className="border-b border-slate-100 last:border-0">
+                                    <td className="py-1.5 pr-3 text-slate-600 whitespace-nowrap">{t.date}</td>
+                                    <td className="py-1.5 pr-3 text-slate-800">
+                                      {t.description}
+                                      {t.flagged && (
+                                        <span
+                                          className="ml-1.5 text-amber-700 cursor-help"
+                                          title={t.flagReason}
+                                        >
+                                          ⚠
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td
+                                      className={`py-1.5 pr-3 font-medium whitespace-nowrap ${
+                                        t.amount >= 0 ? "text-green-700" : "text-red-600"
+                                      }`}
+                                    >
+                                      {t.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                    </td>
+                                    <td className="py-1.5 pr-3 text-slate-600">
+                                      {TRANSACTION_CATEGORY_LABEL[t.category] ?? t.category}
+                                    </td>
+                                    <td className="py-1.5 pr-3">
+                                      <Badge
+                                        text={
+                                          t.status === "confirmada"
+                                            ? "Confirmada"
+                                            : t.status === "rejeitada"
+                                              ? "Rejeitada"
+                                              : "Pendente"
+                                        }
+                                        tone={
+                                          t.status === "confirmada"
+                                            ? "good"
+                                            : t.status === "rejeitada"
+                                              ? "neutral"
+                                              : "warning"
+                                        }
+                                      />
+                                    </td>
+                                    <td className="py-1.5 whitespace-nowrap">
+                                      {t.status === "pendente" && (
+                                        <div className="flex items-center gap-2">
+                                          <form action={confirmDocumentTransaction.bind(null, id, t.id)}>
+                                            <SubmitButton
+                                              pendingText="..."
+                                              className="text-green-700 hover:underline disabled:no-underline"
+                                            >
+                                              Confirmar
+                                            </SubmitButton>
+                                          </form>
+                                          <form action={rejectDocumentTransaction.bind(null, id, t.id)}>
+                                            <SubmitButton
+                                              pendingText="..."
+                                              className="text-red-600 hover:underline disabled:no-underline"
+                                            >
+                                              Rejeitar
+                                            </SubmitButton>
+                                          </form>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      )}
                     </li>
                   ))}
                 </ul>

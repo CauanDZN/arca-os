@@ -1,6 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 import type { Report } from "@/lib/scoring";
 
+// Duplicado de lib/document-extract.ts de propósito: aquele módulo importa
+// pdf-parse (ESM-only, pesado) no topo do arquivo, e lib/ai.ts é importado
+// por praticamente toda página do app — um import estático de lá arrastaria
+// pdf-parse pro bundle de todas elas (mesma causa do FUNCTION_INVOCATION_FAILED
+// que actions-documents.ts documenta evitar com import dinâmico).
+const OCR_CAPABLE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "application/pdf",
+]);
+
 export type AiNarrative = {
   executiveSummary: string;
   areaInsights: {
@@ -208,25 +222,31 @@ const DOCUMENT_TYPES = [
 ];
 
 /**
- * Agente Classificador de Documentos: guesses the document type from its
- * extracted text (when available) or, honestly, only from the filename when
- * the format can't be parsed (images, spreadsheets) — in which case it must
- * report low confidence rather than pretend it read the content.
+ * Agente Classificador de Documentos: classifica pelo texto extraído quando
+ * existe; quando não existe mas o formato é imagem/PDF escaneado, manda os
+ * bytes direto pro Gemini (multimodal — OCR de verdade, sem lib separada);
+ * só cai pra "confiança baixa" só-pelo-nome quando nem isso é possível
+ * (planilha, Office).
  */
 export async function classifyDocument(
   originalName: string,
   mimeType: string,
-  extractedText: string | null
+  extractedText: string | null,
+  fileBytes?: Buffer | null
 ): Promise<DocumentClassification | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
+
+  const canUseOcr = !extractedText && !!fileBytes && OCR_CAPABLE_MIME_TYPES.has(mimeType);
 
   try {
     const ai = new GoogleGenAI({ apiKey });
 
     const contentBlock = extractedText
       ? `Conteúdo extraído (trecho):\n${extractedText}`
-      : "Conteúdo não pôde ser lido (formato não suportado para extração de texto) — classifique apenas pelo nome do arquivo e marque confiança baixa.";
+      : canUseOcr
+        ? "Conteúdo anexado abaixo como imagem/PDF — leia diretamente o que estiver escrito nele."
+        : "Conteúdo não pôde ser lido (formato não suportado para extração de texto) — classifique apenas pelo nome do arquivo e marque confiança baixa.";
 
     const prompt = `Você é o Agente Classificador de Documentos do Data Room da Arca Consulting. Classifique o documento abaixo em UM dos tipos: ${DOCUMENT_TYPES.join(", ")}.
 
@@ -239,7 +259,9 @@ Responda APENAS com um JSON válido no formato exato abaixo, sem markdown, sem t
 
     const response = await ai.models.generateContent({
       model: "gemini-flash-latest",
-      contents: prompt,
+      contents: canUseOcr
+        ? [{ text: prompt }, { inlineData: { mimeType, data: fileBytes!.toString("base64") } }]
+        : prompt,
     });
 
     const text = response.text;
@@ -531,6 +553,111 @@ Responda APENAS com um JSON válido no formato exato abaixo, sem markdown, sem t
     );
   } catch (error) {
     console.error("extractKpiSuggestions failed:", error);
+    return null;
+  }
+}
+
+export type FinancialTransactionCategory =
+  | "fornecedor"
+  | "imposto"
+  | "despesa_pessoal"
+  | "emprestimo"
+  | "outro";
+
+export type ExtractedTransaction = {
+  date: string;
+  description: string;
+  amount: number;
+  category: FinancialTransactionCategory;
+  flagged: boolean;
+  flagReason: string;
+};
+
+const TRANSACTION_CATEGORIES = new Set<string>([
+  "fornecedor",
+  "imposto",
+  "despesa_pessoal",
+  "emprestimo",
+  "outro",
+]);
+const DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * Agente de Extração Financeira (Grupo 2 · Operacionais): consequência
+ * direta do OCR — em vez de só classificar "isto é um extrato", lê o
+ * conteúdo (texto extraído ou, na falta dele, os bytes da imagem/PDF via
+ * OCR) e devolve cada transação encontrada, já sinalizando o que parece
+ * inconsistente (despesa pessoal misturada na conta da empresa, valor
+ * recorrente sem explicação etc.). Nunca inventa transação fora do
+ * documento; a Server Action que chama isso persiste tudo como "pendente"
+ * — revisão humana antes de virar dado oficial, mesmo padrão do
+ * KpiSuggestion.
+ */
+export async function extractFinancialTransactions(
+  documentText: string | null,
+  fileBytes: Buffer | null,
+  mimeType: string
+): Promise<ExtractedTransaction[] | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const canUseOcr = !documentText && !!fileBytes && OCR_CAPABLE_MIME_TYPES.has(mimeType);
+  if (!documentText && !canUseOcr) return null;
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+
+    const contentBlock = documentText
+      ? `Conteúdo do documento:\n${documentText}`
+      : "Conteúdo anexado abaixo como imagem/PDF — leia diretamente.";
+
+    const prompt = `Você é o Agente de Extração Financeira da Arca Consulting. Leia o extrato bancário abaixo (documento real de um cliente) e extraia CADA transação que conseguir identificar com clareza — não invente nenhuma que não esteja no documento.
+
+Para cada transação, identifique:
+- date: data no formato AAAA-MM-DD (se não estiver clara, não inclua essa transação)
+- description: descrição curta, como aparece no extrato
+- amount: valor numérico — positivo para entrada/crédito, negativo para saída/débito
+- category: "fornecedor" (pagamento a fornecedor/prestador), "imposto" (tributo, taxa, DAS, INSS...), "despesa_pessoal" (gasto que parece pessoal do dono, não da empresa), "emprestimo" (empréstimo, financiamento, parcela de dívida) ou "outro"
+- flagged: true se merecer atenção humana (possível despesa pessoal na conta da empresa, valor alto recorrente sem explicação, indício de empréstimo não declarado)
+- flagReason: se flagged, uma frase curta do motivo; senão, string vazia
+
+Se o documento não for um extrato bancário reconhecível, devolva uma lista vazia.
+
+${contentBlock}
+
+Responda APENAS com um JSON válido no formato exato abaixo, sem markdown, sem texto adicional:
+{ "transactions": [ { "date": "AAAA-MM-DD", "description": "...", "amount": 0, "category": "fornecedor|imposto|despesa_pessoal|emprestimo|outro", "flagged": false, "flagReason": "" } ] }`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: canUseOcr
+        ? [{ text: prompt }, { inlineData: { mimeType, data: fileBytes!.toString("base64") } }]
+        : prompt,
+    });
+
+    const text = response.text;
+    if (!text) return null;
+
+    const parsed = JSON.parse(extractJson(text));
+    if (!Array.isArray(parsed.transactions)) return null;
+
+    return parsed.transactions.filter((t: unknown): t is ExtractedTransaction => {
+      if (typeof t !== "object" || t === null) return false;
+      const r = t as Record<string, unknown>;
+      return (
+        typeof r.date === "string" &&
+        DATE_PATTERN.test(r.date) &&
+        typeof r.description === "string" &&
+        r.description.trim() !== "" &&
+        typeof r.amount === "number" &&
+        typeof r.category === "string" &&
+        TRANSACTION_CATEGORIES.has(r.category) &&
+        typeof r.flagged === "boolean" &&
+        typeof r.flagReason === "string"
+      );
+    });
+  } catch (error) {
+    console.error("extractFinancialTransactions failed:", error);
     return null;
   }
 }

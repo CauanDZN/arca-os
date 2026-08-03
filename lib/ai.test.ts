@@ -18,6 +18,7 @@ import {
   generateMeetingMinutes,
   generatePerformanceInsight,
   extractKpiSuggestions,
+  extractFinancialTransactions,
 } from "@/lib/ai";
 
 const company = { name: "Empresa Teste", segment: "Varejo", painPoints: "", objectives: [] };
@@ -247,12 +248,44 @@ describe("classifyDocument", () => {
     expect(result).toEqual(payload);
   });
 
-  it("still classifies (with low confidence expected from the prompt) when there is no extracted text", async () => {
+  it("still classifies (with low confidence expected from the prompt) when there is no extracted text and no file bytes", async () => {
     process.env.GEMINI_API_KEY = "fake-key";
     const payload = { category: "Outro", confidence: "baixa" };
     mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
     const result = await classifyDocument("foto.jpg", "image/jpeg", null);
     expect(result).toEqual(payload);
+    const call = mockGenerateContent.mock.calls[0][0];
+    expect(typeof call.contents).toBe("string");
+  });
+
+  it("sends the image bytes as inlineData (OCR) when there is no extracted text but the file bytes are available", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const payload = { category: "Nota fiscal", confidence: "alta" };
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(payload) });
+    const fileBytes = Buffer.from("fake-image-bytes");
+    const result = await classifyDocument("foto-nf.jpg", "image/jpeg", null, fileBytes);
+    expect(result).toEqual(payload);
+    const call = mockGenerateContent.mock.calls[0][0];
+    expect(Array.isArray(call.contents)).toBe(true);
+    expect(call.contents[1]).toEqual({
+      inlineData: { mimeType: "image/jpeg", data: fileBytes.toString("base64") },
+    });
+  });
+
+  it("does not use inlineData for a mime type Gemini can't read directly (e.g. spreadsheet)", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({
+      text: JSON.stringify({ category: "Planilha de indicadores", confidence: "baixa" }),
+    });
+    const fileBytes = Buffer.from("fake-spreadsheet-bytes");
+    await classifyDocument(
+      "planilha.xlsx",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      null,
+      fileBytes
+    );
+    const call = mockGenerateContent.mock.calls[0][0];
+    expect(typeof call.contents).toBe("string");
   });
 });
 
@@ -491,6 +524,128 @@ describe("extractKpiSuggestions", () => {
     process.env.GEMINI_API_KEY = "fake-key";
     mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify({ suggestions: [] }) });
     const result = await extractKpiSuggestions("Financeiro e Controladoria", allowedIndicators, "texto sem número nenhum");
+    expect(result).toEqual([]);
+  });
+});
+
+describe("extractFinancialTransactions", () => {
+  const originalKey = process.env.GEMINI_API_KEY;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  const validPayload = {
+    transactions: [
+      {
+        date: "2026-06-10",
+        description: "PIX RECEBIDO - CLIENTE X",
+        amount: 5000,
+        category: "outro",
+        flagged: false,
+        flagReason: "",
+      },
+      {
+        date: "2026-06-12",
+        description: "SUPERMERCADO ABC",
+        amount: -450.3,
+        category: "despesa_pessoal",
+        flagged: true,
+        flagReason: "Gasto de supermercado misturado na conta da empresa.",
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mockGenerateContent.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  });
+
+  it("returns null and never calls the API when no key is configured", async () => {
+    delete process.env.GEMINI_API_KEY;
+    const result = await extractFinancialTransactions("texto do extrato", null, "application/pdf");
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null without calling the API when there is no text and no usable file bytes", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const result = await extractFinancialTransactions(null, null, "application/pdf");
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("returns null without calling the API when there is no text and the mime type isn't OCR-capable", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    const result = await extractFinancialTransactions(
+      null,
+      Buffer.from("bytes"),
+      "application/vnd.ms-excel"
+    );
+    expect(result).toBeNull();
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it("uses inlineData (OCR) when there is no text but the file bytes are OCR-capable", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(validPayload) });
+    const fileBytes = Buffer.from("fake-image-bytes");
+    const result = await extractFinancialTransactions(null, fileBytes, "image/jpeg");
+    expect(result).toHaveLength(2);
+    const call = mockGenerateContent.mock.calls[0][0];
+    expect(Array.isArray(call.contents)).toBe(true);
+    expect(call.contents[1]).toEqual({
+      inlineData: { mimeType: "image/jpeg", data: fileBytes.toString("base64") },
+    });
+  });
+
+  it("returns null when the API call rejects", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockRejectedValueOnce(new Error("network down"));
+    const result = await extractFinancialTransactions("texto do extrato", null, "application/pdf");
+    expect(result).toBeNull();
+  });
+
+  it("parses valid transactions from a text-based extract", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(validPayload) });
+    const result = await extractFinancialTransactions("texto do extrato", null, "application/pdf");
+    expect(result).toEqual(validPayload.transactions);
+  });
+
+  it("filters out a transaction with an invalid date", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({
+      text: JSON.stringify({
+        transactions: [
+          { date: "10/06/2026", description: "x", amount: 10, category: "outro", flagged: false, flagReason: "" },
+        ],
+      }),
+    });
+    const result = await extractFinancialTransactions("texto", null, "application/pdf");
+    expect(result).toEqual([]);
+  });
+
+  it("filters out a transaction with an unknown category", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({
+      text: JSON.stringify({
+        transactions: [
+          { date: "2026-06-10", description: "x", amount: 10, category: "salario", flagged: false, flagReason: "" },
+        ],
+      }),
+    });
+    const result = await extractFinancialTransactions("texto", null, "application/pdf");
+    expect(result).toEqual([]);
+  });
+
+  it("returns an empty list when the document isn't a recognizable bank statement", async () => {
+    process.env.GEMINI_API_KEY = "fake-key";
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify({ transactions: [] }) });
+    const result = await extractFinancialTransactions("um contrato qualquer", null, "application/pdf");
     expect(result).toEqual([]);
   });
 });

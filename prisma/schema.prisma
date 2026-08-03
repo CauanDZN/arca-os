@@ -24,7 +24,7 @@ model User {
 }
 
 model Company {
-  id                          String          @id @default(cuid())
+  id                          String                @id @default(cuid())
   name                        String
   segment                     String
   marketAge                   String
@@ -36,7 +36,11 @@ model Company {
   cities                      String
   painPoints                  String
   objectives                  String // JSON-encoded array of selected objectives
-  createdAt                   DateTime        @default(now())
+  onboardingResponsible       String                @default("") // responsável Arca definido na Trilha 1 (Onboarding)
+  contractedVerticals         String                @default("[]") // JSON-encoded array de chaves de lib/verticals.ts — quais módulos (Arca Checkup por vertical) essa empresa contratou; 0, 1 ou N, independentes entre si
+  omieAppKey                  String? // credencial da API da Omie desta empresa (cada cliente tem a própria conta) — texto puro de propósito, mesmo padrão de User.password neste MVP
+  omieAppSecret               String?
+  createdAt                   DateTime              @default(now())
   diagnostics                 Diagnostic[]
   documents                   Document[]
   meetingNotes                MeetingNote[]
@@ -44,13 +48,14 @@ model Company {
   kpiSuggestions              KpiSuggestion[]
   performanceInsight          String? // Agente de Performance por Área — cache manual, botão "Gerar/Atualizar"
   performanceInsightUpdatedAt DateTime?
-  webhookToken                String?         @unique // gerado sob demanda; null = webhook desativado pra essa empresa
+  webhookToken                String?               @unique // gerado sob demanda; null = webhook desativado pra essa empresa
   webhookEvents               WebhookEvent[]
   outboundWebhookUrl          String? // URL do ERP/CRM do cliente — ArcaOS dispara eventos (POST) pra cá
   users                       User[] // usuários vinculados (role "cliente")
   decisions                   Decision[] // histórico de decisões (Portal do Cliente / Comitê de Gestão)
   messages                    Message[] // comunicação com a Arca (Portal do Cliente)
   monthlyReports              MonthlyReport[] // scorecard mensal gerado pelo cron do Comitê de Gestão
+  documentTransactions        DocumentTransaction[] // Agente de Extração Financeira — transações extraídas de extratos no Data Room
 }
 
 model Decision {
@@ -136,6 +141,7 @@ model Diagnostic {
   companyId             String
   company               Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   status                String            @default("em_andamento") // em_andamento | concluido | em_execucao
+  scope                 String            @default("completo") // "completo" (140 perguntas, 12 áreas) ou a areaKey de um diagnóstico de módulo/vertical isolado (ex.: "financeiro")
   aiNarrative           String? // JSON: { executiveSummary, areaInsights: [{ areaKey, causaRaiz, recomendacao }] }
   evolutionNarrative    String? // Agente de Evolução de Maturidade — gerado uma vez na conclusão, se houver diagnóstico anterior
   sprintReportContent   String? // Agente de Relatório de Sprint — cache manual, botão "Gerar/Atualizar"
@@ -189,9 +195,9 @@ model Answer {
 }
 
 model Document {
-  id                  String          @id @default(cuid())
+  id                  String                @id @default(cuid())
   companyId           String
-  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company             Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   category            String // area key or "geral"
   originalName        String
   storedUrl           String // URL do blob no Vercel Blob (era um filename local antes da migração pra Postgres+Blob)
@@ -199,8 +205,25 @@ model Document {
   size                Int
   aiSuggestedCategory String? // free-form document type guessed by the Classificador de Documentos agent
   aiConfidence        String? // "alta" | "baixa"
-  createdAt           DateTime        @default(now())
+  createdAt           DateTime              @default(now())
   kpiSuggestions      KpiSuggestion[]
+  transactions        DocumentTransaction[]
+}
+
+model DocumentTransaction {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  date        String // "AAAA-MM-DD", como veio da extração
+  description String
+  amount      Float // positivo = entrada, negativo = saída
+  category    String // fornecedor | imposto | despesa_pessoal | emprestimo | outro
+  flagged     Boolean  @default(false)
+  flagReason  String   @default("")
+  status      String   @default("pendente") // pendente | confirmada | rejeitada
+  createdAt   DateTime @default(now())
 }
 
 model Task {

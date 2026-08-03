@@ -2,13 +2,15 @@
 
 import { prisma } from "@/lib/prisma";
 import { AREAS, getAreaIndex } from "@/lib/areas";
+import { getVerticalByKey } from "@/lib/verticals";
 import { buildReport } from "@/lib/scoring";
-import { generateAiNarrative, generateMaturityEvolution } from "@/lib/ai";
+import { generateAiNarrative, generateMaturityEvolution, type AiNarrative } from "@/lib/ai";
 import { fireOutboundWebhook } from "@/lib/outbound-webhook";
-import { answerFieldsSchema } from "@/lib/validation";
+import { answerFieldsSchema, narrativeEditSchema, narrativeAreaInsightSchema } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 export async function createDiagnostic(formData: FormData) {
   const session = await getSession();
@@ -49,7 +51,7 @@ export async function saveAreaAnswers(
   const session = await getSession();
   const owning = await prisma.diagnostic.findUnique({
     where: { id: diagnosticId },
-    select: { companyId: true },
+    select: { companyId: true, scope: true },
   });
   if (!owning) notFound();
   assertCompanyAccess(session, owning.companyId);
@@ -79,6 +81,25 @@ export async function saveAreaAnswers(
       update: fields,
       create: { diagnosticId, areaKey, questionId: question.id, ...fields },
     });
+  }
+
+  if (owning.scope !== "completo") {
+    // Diagnóstico de módulo/vertical (Arca Checkup por vertical): navega
+    // pelas áreas DA VERTICAL (1 a N, ver lib/verticals.ts), não pela lista
+    // global de 12 — uma vertical como Comercial cobre 3 áreas em sequência
+    // antes de concluir; Financeiro cobre só 1.
+    const vertical = getVerticalByKey(owning.scope);
+    if (!vertical) throw new Error("Vertical inválida");
+
+    const posInVertical = vertical.areaKeys.indexOf(areaKey);
+    const nextAreaKey = vertical.areaKeys[posInVertical + 1];
+
+    if (nextAreaKey) {
+      redirect(`/diagnostico/${diagnosticId}/questionario/${nextAreaKey}`);
+    }
+
+    await prisma.diagnostic.update({ where: { id: diagnosticId }, data: { status: "concluido" } });
+    redirect(`/empresas/${owning.companyId}/modulo/${vertical.key}/relatorio/${diagnosticId}`);
   }
 
   const currentIndex = getAreaIndex(areaKey);
@@ -185,5 +206,56 @@ export async function generateNarrativeAction(diagnosticId: string) {
     }
   }
 
+  revalidatePath(`/diagnostico/${diagnosticId}/relatorio`);
+  redirect(`/diagnostico/${diagnosticId}/relatorio#sumario`);
+}
+
+// Passo de "validação consultiva": o consultor lê a narrativa gerada por IA e
+// pode ajustar o sumário e a causa raiz/recomendação por área antes de
+// aprovar o plano — approveActionPlan copia causaRaiz pro rootCause de cada
+// tarefa criada, então uma edição aqui muda o que de fato vira o plano.
+export async function updateNarrativeAction(diagnosticId: string, formData: FormData) {
+  const session = await getSession();
+  const diagnostic = await prisma.diagnostic.findUnique({
+    where: { id: diagnosticId },
+    select: { companyId: true, aiNarrative: true },
+  });
+  if (!diagnostic) notFound();
+  assertCompanyAccess(session, diagnostic.companyId);
+  if (!diagnostic.aiNarrative) redirect(`/diagnostico/${diagnosticId}/relatorio`);
+
+  const summaryResult = narrativeEditSchema.safeParse({
+    executiveSummary: formData.get("executiveSummary"),
+  });
+  if (!summaryResult.success) redirect(`/diagnostico/${diagnosticId}/relatorio?error=narrativa`);
+
+  const areaKeys = formData.getAll("areaKey").map(String);
+  const causaRaizes = formData.getAll("causaRaiz").map(String);
+  const recomendacoes = formData.getAll("recomendacao").map(String);
+
+  const areaInsights = areaKeys
+    .map((areaKey, i) =>
+      narrativeAreaInsightSchema.safeParse({
+        areaKey,
+        causaRaiz: causaRaizes[i],
+        recomendacao: recomendacoes[i],
+      })
+    )
+    .filter((r) => r.success)
+    .map((r) => r.data);
+
+  const narrative: AiNarrative = {
+    executiveSummary: summaryResult.data.executiveSummary,
+    areaInsights,
+  };
+  await prisma.diagnostic.update({
+    where: { id: diagnosticId },
+    data: { aiNarrative: JSON.stringify(narrative) },
+  });
+
+  // Sem isso, o Router Cache do Next reaproveita o RSC payload da mesma rota
+  // que o consultor acabou de visitar e o redirect volta mostrando o texto
+  // antigo até um refresh manual.
+  revalidatePath(`/diagnostico/${diagnosticId}/relatorio`);
   redirect(`/diagnostico/${diagnosticId}/relatorio#sumario`);
 }
