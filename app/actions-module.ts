@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getVerticalByKey } from "@/lib/verticals";
 import { buildVerticalReport } from "@/lib/vertical-diagnostic";
+import { getPlaybookByVertical } from "@/lib/playbooks";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess } from "@/lib/access";
 import { redirect, notFound } from "next/navigation";
@@ -67,6 +68,34 @@ export async function approveVerticalActionPlan(diagnosticId: string) {
         epicId: epic.id,
       })),
     });
+
+    // Playbook de Execução: passo a passo padrão da vertical (plano
+    // estratégico, Nível 2), independente de qualquer nota do diagnóstico —
+    // é o que faz o Kanban parar de tratar "implantar CRM" e "criar
+    // organograma" como o mesmo tipo de card genérico. Épico separado do
+    // plano de ação pra distinguir "o que essa empresa fez de errado" (vem
+    // do diagnóstico) de "o padrão de implantação da vertical" (vem do
+    // playbook, igual pra qualquer cliente).
+    const playbook = getPlaybookByVertical(vertical.key);
+    if (playbook) {
+      const playbookEpic = await prisma.epic.create({
+        data: { diagnosticId, name: `Playbook de Execução — ${vertical.name}`, description: playbook.summary },
+      });
+
+      await prisma.task.createMany({
+        data: playbook.steps.map((step, index) => ({
+          diagnosticId,
+          areaKey: vertical.key,
+          areaName: vertical.name,
+          title: step,
+          priority: "Média",
+          timeframe: "31 a 90 dias",
+          status: "todo",
+          position: report.actionItems.length + index,
+          epicId: playbookEpic.id,
+        })),
+      });
+    }
 
     await prisma.diagnostic.update({ where: { id: diagnosticId }, data: { status: "em_execucao" } });
   }

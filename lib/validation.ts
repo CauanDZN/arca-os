@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { AREAS } from "@/lib/areas";
 
+// FormData.get() devolve null (não undefined) pra uma chave ausente — o que
+// escapa do .default("") do zod, que só cobre undefined. Normaliza null/
+// undefined pra "" antes da validação de string, tanto pro formulário real
+// (que sempre manda o campo, mesmo vazio) quanto pra uma chamada direta da
+// Server Action que omita o campo.
+export const optionalTrimmedString = (max: number) =>
+  z.preprocess((v) => (v === null || v === undefined ? "" : v), z.string().trim().max(max));
+
 // Single source of truth for the fixed vocab used across the questionnaire form,
 // the AI prompts and the priority matrix — keeping these as enums (not free text)
 // is what lets the AI agents and the rule-based ones read the data reliably.
@@ -80,6 +88,26 @@ export const omieCredentialsSchema = z.object({
   omieAppSecret: z.string().trim().min(1, "Informe o App Secret da Omie.").max(60),
 });
 
+// Vertical Parceira (plano estratégico, p. 16) — parcerias operacionais
+// (execução técnica sob supervisão Arca), estratégicas (SaaS, fintechs,
+// instituições financeiras) e comerciais (representantes, franquias).
+export const PARTNER_TYPES = ["operacional", "estrategica", "comercial"] as const;
+export const PARTNER_HOMOLOGATION_STATUSES = ["pendente", "homologado", "suspenso"] as const;
+export const PARTNER_REFERRAL_STATUSES = ["indicado", "em_andamento", "concluido", "perdido"] as const;
+
+export const partnerSchema = z.object({
+  name: z.string().trim().min(1, "Informe o nome do parceiro.").max(160),
+  type: z.enum(PARTNER_TYPES),
+  category: z.string().trim().min(1, "Informe a categoria.").max(80),
+  contactInfo: optionalTrimmedString(300),
+  slaHours: z.coerce.number().int().min(0).max(720).optional(),
+});
+
+export const partnerReferralSchema = z.object({
+  partnerId: z.string().trim().min(1, "Selecione um parceiro."),
+  notes: optionalTrimmedString(300),
+});
+
 // Revisão humana da narrativa de IA antes da aprovação do plano — o sumário é
 // um campo só, os insights por área chegam como arrays paralelos (areaKey[],
 // causaRaiz[], recomendacao[]) porque o form tem um bloco repetido por área.
@@ -138,14 +166,6 @@ export const kpiEntrySchema = z.object({
 });
 
 export const USER_ROLES = ["admin", "consultor", "cliente"] as const;
-
-// FormData.get() devolve null (não undefined) pra uma chave ausente — o que
-// escapa do .default("") do zod, que só cobre undefined. Normaliza null/
-// undefined pra "" antes da validação de string, tanto pro formulário real
-// (que sempre manda os dois campos, mesmo vazios) quanto pra uma chamada
-// direta da Server Action que omita o campo.
-const optionalTrimmedString = (max: number) =>
-  z.preprocess((v) => (v === null || v === undefined ? "" : v), z.string().trim().max(max));
 
 export const userSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome.").max(120),

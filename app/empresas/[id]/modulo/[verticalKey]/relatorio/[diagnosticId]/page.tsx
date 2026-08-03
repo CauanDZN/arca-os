@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getVerticalByKey } from "@/lib/verticals";
 import { buildVerticalReport } from "@/lib/vertical-diagnostic";
+import { getPlaybookByVertical } from "@/lib/playbooks";
 import { findEvidenceGaps } from "@/lib/audit";
 import { statusTone, maturityTone, priorityTone } from "@/lib/badge-tones";
 import { getSession } from "@/lib/auth";
@@ -31,7 +32,7 @@ export default async function ModuloVerticalRelatorioPage({
 
   const diagnostic = await prisma.diagnostic.findUnique({
     where: { id: diagnosticId },
-    include: { company: true, answers: true, tasks: true },
+    include: { company: true, answers: true, tasks: true, epics: true },
   });
   if (!diagnostic || diagnostic.companyId !== id || diagnostic.scope !== verticalKey) notFound();
 
@@ -43,17 +44,29 @@ export default async function ModuloVerticalRelatorioPage({
     diagnostic.answers.map((a) => ({ areaKey: a.areaKey, questionId: a.questionId, score: a.score }))
   );
 
+  // Filtra pelas áreas atuais da vertical, não só pelo diagnosticId — um
+  // diagnóstico aprovado antes de uma vertical mudar de composição (ex.:
+  // Marketing saindo de Comercial) ainda tem respostas de áreas que não
+  // pertencem mais a ela, e essas respostas não devem aparecer aqui.
   const evidenceGaps = findEvidenceGaps(
-    diagnostic.answers.map((a) => ({
-      areaKey: a.areaKey,
-      questionId: a.questionId,
-      score: a.score,
-      evidence: a.evidence,
-    }))
+    diagnostic.answers
+      .filter((a) => vertical.areaKeys.includes(a.areaKey))
+      .map((a) => ({
+        areaKey: a.areaKey,
+        questionId: a.questionId,
+        score: a.score,
+        evidence: a.evidence,
+      }))
   );
 
   const alreadyApproved = diagnostic.tasks.length > 0;
   const multiArea = vertical.areaKeys.length > 1;
+  const playbook = getPlaybookByVertical(vertical.key);
+  // Diagnósticos aprovados antes deste épico existir não ganham ele
+  // retroativamente (approveVerticalActionPlan só roda a criação uma vez) —
+  // sem essa checagem, o aviso abaixo diria "já criado" pra um épico que
+  // nunca existiu.
+  const playbookAlreadyCreated = diagnostic.epics.some((e) => e.name.startsWith("Playbook de Execução"));
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
@@ -185,6 +198,33 @@ export default async function ModuloVerticalRelatorioPage({
             ))}
           </div>
         </Card>
+
+        {playbook && (
+          <Card>
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <h2 className="text-xl font-bold text-slate-900">Playbook de Execução — {vertical.name}</h2>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 shrink-0">
+                Nível 2 · Execução
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">{playbook.summary}</p>
+            <ul className="space-y-2">
+              {playbook.steps.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                  <span className="mt-0.5 text-slate-300">○</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-slate-400 mt-4">
+              {playbookAlreadyCreated
+                ? "Já criado como um épico próprio no Kanban junto com o plano de ação."
+                : alreadyApproved
+                  ? "Plano aprovado antes deste playbook existir — não entrou retroativamente no Kanban."
+                  : "Padrão de implantação da vertical — entra como um épico separado no Kanban ao aprovar o plano de ação."}
+            </p>
+          </Card>
+        )}
       </div>
     </main>
   );

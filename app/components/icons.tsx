@@ -61,6 +61,16 @@ export function PlugIcon({ className = "w-4 h-4" }: IconProps) {
   );
 }
 
+export function HandshakeIcon({ className = "w-4 h-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <circle cx="7" cy="8" r="3" />
+      <circle cx="17" cy="16" r="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 10.5l5 5" />
+    </svg>
+  );
+}
+
 export function SearchIcon({ className = "w-5 h-5" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>

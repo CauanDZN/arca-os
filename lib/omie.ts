@@ -1,5 +1,5 @@
 // Integração com a API da Omie (ERP). Cada empresa cliente tem sua própria
-// conta Omie e suas próprias credenciais (Company.omieAppKey/omieAppSecret) —
+// conta Omie e suas próprias credenciais (ErpConnection, provider "omie") —
 // não existe uma conta Omie única da Arca. Formato de chamada é JSON-RPC-like:
 // POST para /api/v1/{modulo}/{recurso}/ com { call, app_key, app_secret, param: [{...}] }.
 // Confirmado com chamadas reais em ListarClientes, ListarContasReceber,

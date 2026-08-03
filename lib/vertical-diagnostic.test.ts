@@ -4,7 +4,8 @@ import { getVerticalByKey } from "@/lib/verticals";
 import { getAreaByKey } from "@/lib/areas";
 
 const financeiro = getVerticalByKey("financeiro")!; // 1 área só (financeiro)
-const comercial = getVerticalByKey("comercial")!; // 3 áreas (comercial, marketing, atendimento)
+const comercial = getVerticalByKey("comercial")!; // 2 áreas (comercial, atendimento)
+const marketing = getVerticalByKey("marketing")!; // 1 área só (marketing) — separada de Comercial
 const financeiroArea = getAreaByKey("financeiro")!;
 
 describe("buildVerticalReport — vertical de 1 área só (Financeiro)", () => {
@@ -32,34 +33,32 @@ describe("buildVerticalReport — vertical de 1 área só (Financeiro)", () => {
 });
 
 describe("buildVerticalReport — vertical com múltiplas áreas (Comercial)", () => {
-  it("blends answers from all 3 areas into a single average", () => {
+  it("blends answers from both areas into a single average", () => {
     const comercialArea = getAreaByKey("comercial")!;
-    const marketingArea = getAreaByKey("marketing")!;
     const atendimentoArea = getAreaByKey("atendimento")!;
 
     const answers = [
       { areaKey: "comercial", questionId: comercialArea.questions[0].id, score: 5 },
-      { areaKey: "marketing", questionId: marketingArea.questions[0].id, score: 3 },
       { areaKey: "atendimento", questionId: atendimentoArea.questions[0].id, score: 1 },
     ];
     const report = buildVerticalReport(comercial, answers);
 
-    expect(report.average).toBe(3); // (5+3+1)/3
+    expect(report.average).toBe(3); // (5+1)/2
     expect(report.verticalKey).toBe("comercial");
   });
 
   it("tags each weak question with its own area, not the vertical's first area", () => {
-    const marketingArea = getAreaByKey("marketing")!;
+    const comercialArea = getAreaByKey("comercial")!;
     const atendimentoArea = getAreaByKey("atendimento")!;
 
     const answers = [
-      { areaKey: "marketing", questionId: marketingArea.questions[0].id, score: 1 },
+      { areaKey: "comercial", questionId: comercialArea.questions[1].id, score: 1 },
       { areaKey: "atendimento", questionId: atendimentoArea.questions[0].id, score: 2 },
     ];
     const report = buildVerticalReport(comercial, answers);
 
-    expect(report.weakestQuestions.map((w) => w.areaKey).sort()).toEqual(["atendimento", "marketing"]);
-    expect(report.actionItems.map((a) => a.areaKey).sort()).toEqual(["atendimento", "marketing"]);
+    expect(report.weakestQuestions.map((w) => w.areaKey).sort()).toEqual(["atendimento", "comercial"]);
+    expect(report.actionItems.map((a) => a.areaKey).sort()).toEqual(["atendimento", "comercial"]);
   });
 
   it("caps weakest questions at 5, sorted ascending by score", () => {
@@ -72,5 +71,21 @@ describe("buildVerticalReport — vertical com múltiplas áreas (Comercial)", (
     const report = buildVerticalReport(comercial, answers);
     expect(report.weakestQuestions).toHaveLength(5);
     expect(report.weakestQuestions.map((w) => w.score)).toEqual([0, 0, 1, 1, 2]);
+  });
+});
+
+describe("buildVerticalReport — vertical de 1 área só (Marketing, separada de Comercial)", () => {
+  it("computes the average from only marketing answers", () => {
+    const marketingArea = getAreaByKey("marketing")!;
+    const answers = marketingArea.questions.map((q) => ({
+      areaKey: "marketing",
+      questionId: q.id,
+      score: 3,
+    }));
+    const report = buildVerticalReport(marketing, answers);
+
+    expect(report.average).toBe(3);
+    expect(report.verticalKey).toBe("marketing");
+    expect(report.verticalName).toBe(marketing.name);
   });
 });

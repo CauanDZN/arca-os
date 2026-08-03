@@ -9,6 +9,8 @@ import { currentPeriod } from "@/lib/monthly-report";
 import { redirect, notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+const PROVIDER = "omie";
+
 // Valida as credenciais contra a API real antes de salvar (ListarCategorias é
 // a chamada mais barata) — evita guardar uma App Key/Secret que nunca vai
 // funcionar e só descobrir isso na hora da sincronização.
@@ -29,9 +31,10 @@ export async function saveOmieCredentials(companyId: string, formData: FormData)
     redirect(`/empresas/${companyId}?error=omie-credenciais`);
   }
 
-  await prisma.company.update({
-    where: { id: companyId },
-    data: { omieAppKey: parsed.data.omieAppKey, omieAppSecret: parsed.data.omieAppSecret },
+  await prisma.erpConnection.upsert({
+    where: { companyId_provider: { companyId, provider: PROVIDER } },
+    update: { appKey: parsed.data.omieAppKey, appSecret: parsed.data.omieAppSecret },
+    create: { companyId, provider: PROVIDER, appKey: parsed.data.omieAppKey, appSecret: parsed.data.omieAppSecret },
   });
 
   revalidatePath(`/empresas/${companyId}`);
@@ -43,10 +46,7 @@ export async function disconnectOmie(companyId: string) {
   if (!session || session.role === "cliente") notFound();
   assertCompanyAccess(session, companyId);
 
-  await prisma.company.update({
-    where: { id: companyId },
-    data: { omieAppKey: null, omieAppSecret: null },
-  });
+  await prisma.erpConnection.deleteMany({ where: { companyId, provider: PROVIDER } });
 
   revalidatePath(`/empresas/${companyId}`);
   redirect(`/empresas/${companyId}`);
@@ -61,17 +61,15 @@ export async function syncOmieFinancials(companyId: string) {
   if (!session || session.role === "cliente") notFound();
   assertCompanyAccess(session, companyId);
 
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) notFound();
-  if (!company.omieAppKey || !company.omieAppSecret) redirect(`/empresas/${companyId}?error=omie-desconectado`);
+  const connection = await prisma.erpConnection.findUnique({
+    where: { companyId_provider: { companyId, provider: PROVIDER } },
+  });
+  if (!connection) redirect(`/empresas/${companyId}?error=omie-desconectado`);
 
   const month = currentPeriod();
 
   try {
-    const summary = await fetchOmieFinancialSummary({
-      appKey: company.omieAppKey,
-      appSecret: company.omieAppSecret,
-    });
+    const summary = await fetchOmieFinancialSummary({ appKey: connection.appKey, appSecret: connection.appSecret });
 
     await prisma.$transaction([
       prisma.kpiEntry.upsert({
@@ -84,6 +82,7 @@ export async function syncOmieFinancials(companyId: string) {
         update: { value: summary.endividamentoValue },
         create: { companyId, areaKey: "financeiro", indicatorName: "Endividamento", month, value: summary.endividamentoValue },
       }),
+      prisma.erpConnection.update({ where: { id: connection.id }, data: { lastSyncAt: new Date() } }),
     ]);
   } catch {
     redirect(`/empresas/${companyId}/indicadores?error=omie-sync`);

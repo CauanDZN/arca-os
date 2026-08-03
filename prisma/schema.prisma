@@ -38,9 +38,8 @@ model Company {
   objectives                  String // JSON-encoded array of selected objectives
   onboardingResponsible       String                @default("") // responsável Arca definido na Trilha 1 (Onboarding)
   contractedVerticals         String                @default("[]") // JSON-encoded array de chaves de lib/verticals.ts — quais módulos (Arca Checkup por vertical) essa empresa contratou; 0, 1 ou N, independentes entre si
-  omieAppKey                  String? // credencial da API da Omie desta empresa (cada cliente tem a própria conta) — texto puro de propósito, mesmo padrão de User.password neste MVP
-  omieAppSecret               String?
   createdAt                   DateTime              @default(now())
+  erpConnections              ErpConnection[] // credenciais de ERP por provedor (Omie hoje; TOTVS/Voalle amanhã sem mudar o schema de novo)
   diagnostics                 Diagnostic[]
   documents                   Document[]
   meetingNotes                MeetingNote[]
@@ -56,6 +55,53 @@ model Company {
   messages                    Message[] // comunicação com a Arca (Portal do Cliente)
   monthlyReports              MonthlyReport[] // scorecard mensal gerado pelo cron do Comitê de Gestão
   documentTransactions        DocumentTransaction[] // Agente de Extração Financeira — transações extraídas de extratos no Data Room
+  partnerReferrals            PartnerReferral[] // indicações de parceiro recebidas por essa empresa (vertical Parceira)
+}
+
+// Vertical Parceira (plano estratégico, p. 16) — não é uma vertical de
+// diagnóstico como as 9 de lib/verticals.ts (sem área/perguntas no
+// questionário); é um cadastro de parceiros homologados da Arca e o registro
+// de quando um deles foi indicado pra uma empresa cliente.
+model Partner {
+  id                 String            @id @default(cuid())
+  name               String
+  type               String // operacional | estrategica | comercial — as 3 categorias de parceria do plano
+  category           String // ex.: "Jurídico", "Engenharia", "SaaS", "Fintech" — texto livre
+  contactInfo        String            @default("")
+  homologationStatus String            @default("pendente") // pendente | homologado | suspenso
+  slaHours           Int? // meta de SLA de atendimento em horas (plano: ≤48h)
+  createdAt          DateTime          @default(now())
+  referrals          PartnerReferral[]
+}
+
+model PartnerReferral {
+  id        String   @id @default(cuid())
+  partnerId String
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status    String   @default("indicado") // indicado | em_andamento | concluido | perdido
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+}
+
+// Um provedor de ERP por empresa (@@unique). Antes disso era Company.omieAppKey/
+// omieAppSecret, específico da Omie — generalizado pra suportar outros ERPs do
+// diagrama do plano estratégico (TOTVS, Voalle) sem precisar de colunas novas
+// na Company a cada integração. Texto puro de propósito, mesmo padrão de
+// User.password neste MVP.
+model ErpConnection {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider   String // "omie" hoje — livre pra "totvs"/"voalle" no futuro, sem migration nova
+  appKey     String
+  appSecret  String
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([companyId, provider])
 }
 
 model Decision {

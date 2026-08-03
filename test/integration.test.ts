@@ -82,11 +82,21 @@ import {
 } from "@/app/actions-webhooks";
 import { POST as receiveWebhook } from "@/app/api/webhooks/[companyId]/route";
 import { generateVerticalInsightAction } from "@/app/actions-vertical";
+import { startVerticalDiagnostic, approveVerticalActionPlan } from "@/app/actions-module";
+import { getPlaybookByVertical } from "@/lib/playbooks";
 import { createMeetingNote, deleteMeetingNote } from "@/app/actions-meetings";
 import { upsertKpiEntry, deleteKpiEntry, applyKpiSuggestion, rejectKpiSuggestion } from "@/app/actions-kpis";
 import { login, logout } from "@/app/actions-auth";
 import { createUser, updateUserRole, deleteUser } from "@/app/actions-users";
 import { deleteCompany } from "@/app/actions-empresas";
+import {
+  createPartner,
+  updatePartnerHomologation,
+  deletePartner,
+  createPartnerReferral,
+  updatePartnerReferralStatus,
+  deletePartnerReferral,
+} from "@/app/actions-partners";
 
 async function expectRedirect(promise: Promise<unknown>): Promise<string> {
   try {
@@ -140,6 +150,12 @@ async function createTestCompany(name: string): Promise<string> {
   const diagnostic = await prisma.diagnostic.findFirstOrThrow({ where: { companyId: company.id } });
   expect(diagnosticId).toBe(diagnostic.id);
   return diagnostic.id;
+}
+
+async function createTestCompanyId(name: string): Promise<string> {
+  await expectRedirect(createDiagnostic(minimalCompanyForm(name)));
+  const company = await prisma.company.findFirstOrThrow({ where: { name } });
+  return company.id;
 }
 
 async function completeAllAreas(diagnosticId: string, score: number) {
@@ -478,6 +494,49 @@ describe("approveActionPlan + moveTask (Kanban)", () => {
     expect(updated.successIndicator).toBe("DRE fechado até o 5º dia útil");
     expect(updated.dependencies).toBe("Acesso ao sistema financeiro");
     expect(updated.completionEvidence).toBe("Print do relatório assinado");
+  });
+});
+
+describe("approveVerticalActionPlan (Playbook de Execução)", () => {
+  it("creates a plano-de-ação epic and a separate playbook epic seeded from lib/playbooks.ts", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Playbook");
+    const redirectUrl = await expectRedirect(startVerticalDiagnostic(companyId, "financeiro"));
+    const diagnosticId = redirectUrl.match(/\/diagnostico\/([^/]+)\//)![1];
+
+    await expectRedirect(saveAreaAnswers(diagnosticId, "financeiro", areaAnswersForm("financeiro", 0)));
+    await expectRedirect(approveVerticalActionPlan(diagnosticId));
+
+    const epics = await prisma.epic.findMany({ where: { diagnosticId } });
+    expect(epics).toHaveLength(2);
+
+    const playbook = getPlaybookByVertical("financeiro")!;
+    const playbookEpic = epics.find((e) => e.name.startsWith("Playbook de Execução"))!;
+    expect(playbookEpic).toBeDefined();
+    expect(playbookEpic.description).toBe(playbook.summary);
+
+    const playbookTasks = await prisma.task.findMany({ where: { diagnosticId, epicId: playbookEpic.id } });
+    expect(playbookTasks).toHaveLength(playbook.steps.length);
+    expect(playbookTasks.map((t) => t.title).sort()).toEqual([...playbook.steps].sort());
+    expect(playbookTasks.every((t) => t.status === "todo" && t.priority === "Média")).toBe(true);
+
+    const planEpic = epics.find((e) => e.id !== playbookEpic.id)!;
+    const planTasks = await prisma.task.findMany({ where: { diagnosticId, epicId: planEpic.id } });
+    expect(planTasks.length).toBeGreaterThan(0);
+  });
+
+  it("is idempotent: approving twice does not duplicate the playbook tasks", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Playbook Idempotente");
+    const redirectUrl = await expectRedirect(startVerticalDiagnostic(companyId, "financeiro"));
+    const diagnosticId = redirectUrl.match(/\/diagnostico\/([^/]+)\//)![1];
+    await expectRedirect(saveAreaAnswers(diagnosticId, "financeiro", areaAnswersForm("financeiro", 0)));
+
+    await expectRedirect(approveVerticalActionPlan(diagnosticId));
+    const firstCount = await prisma.task.count({ where: { diagnosticId } });
+
+    await expectRedirect(approveVerticalActionPlan(diagnosticId));
+    const secondCount = await prisma.task.count({ where: { diagnosticId } });
+
+    expect(secondCount).toBe(firstCount);
   });
 });
 
@@ -1107,5 +1166,148 @@ describe("deleteCompany (zona de perigo)", () => {
 
     await expectNotFound(deleteCompany(diagnostic.companyId));
     expect(await prisma.company.findUnique({ where: { id: diagnostic.companyId } })).not.toBeNull();
+  });
+});
+
+describe("Vertical Parceira (createPartner/updatePartnerHomologation/deletePartner)", () => {
+  it("creates a partner with default 'pendente' homologation and lets it be homologated", async () => {
+    const fd = new FormData();
+    fd.set("name", "Escritório XPTO Advocacia");
+    fd.set("type", "operacional");
+    fd.set("category", "Jurídico");
+    fd.set("contactInfo", "contato@xpto.adv.br");
+    fd.set("slaHours", "48");
+
+    const redirectUrl = await expectRedirect(createPartner(fd));
+    expect(redirectUrl).toBe("/parceiros?sucesso=criado");
+
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Escritório XPTO Advocacia" } });
+    expect(partner.homologationStatus).toBe("pendente");
+    expect(partner.slaHours).toBe(48);
+
+    const statusFd = new FormData();
+    statusFd.set("homologationStatus", "homologado");
+    await expectRedirect(updatePartnerHomologation(partner.id, statusFd));
+
+    const updated = await prisma.partner.findUniqueOrThrow({ where: { id: partner.id } });
+    expect(updated.homologationStatus).toBe("homologado");
+  });
+
+  it("leaves slaHours null when the field is left blank", async () => {
+    const fd = new FormData();
+    fd.set("name", "Parceiro Sem SLA");
+    fd.set("type", "estrategica");
+    fd.set("category", "SaaS");
+    fd.set("contactInfo", "");
+    fd.set("slaHours", "");
+
+    await expectRedirect(createPartner(fd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro Sem SLA" } });
+    expect(partner.slaHours).toBeNull();
+  });
+
+  it("rejects an invalid homologation status", async () => {
+    const fd = new FormData();
+    fd.set("name", "Parceiro Status Inválido");
+    fd.set("type", "comercial");
+    fd.set("category", "Franquia");
+    await expectRedirect(createPartner(fd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro Status Inválido" } });
+
+    const statusFd = new FormData();
+    statusFd.set("homologationStatus", "aprovado-por-engano");
+    const redirectUrl = await expectRedirect(updatePartnerHomologation(partner.id, statusFd));
+    expect(redirectUrl).toBe("/parceiros?error=validacao");
+
+    const unchanged = await prisma.partner.findUniqueOrThrow({ where: { id: partner.id } });
+    expect(unchanged.homologationStatus).toBe("pendente");
+  });
+
+  it("only an admin can delete a partner", async () => {
+    const fd = new FormData();
+    fd.set("name", "Parceiro Pra Excluir");
+    fd.set("type", "operacional");
+    fd.set("category", "Facilities");
+    await expectRedirect(createPartner(fd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro Pra Excluir" } });
+
+    mockGetSession.mockResolvedValue({
+      userId: "consultor-test",
+      name: "Consultor Teste",
+      email: "consultor@test.com",
+      role: "consultor",
+      title: "Consultor",
+    } satisfies Session);
+    await expectNotFound(deletePartner(partner.id));
+    expect(await prisma.partner.findUnique({ where: { id: partner.id } })).not.toBeNull();
+
+    mockGetSession.mockResolvedValue(ADMIN_SESSION);
+    await expectRedirect(deletePartner(partner.id));
+    expect(await prisma.partner.findUnique({ where: { id: partner.id } })).toBeNull();
+  });
+});
+
+describe("Indicação de parceiro (createPartnerReferral/updatePartnerReferralStatus/deletePartnerReferral)", () => {
+  it("creates a referral linking a homologated partner to a company, defaulting to 'indicado'", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Indicação");
+
+    const partnerFd = new FormData();
+    partnerFd.set("name", "Contador Parceiro");
+    partnerFd.set("type", "estrategica");
+    partnerFd.set("category", "Contábil");
+    await expectRedirect(createPartner(partnerFd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Contador Parceiro" } });
+
+    const referralFd = new FormData();
+    referralFd.set("partnerId", partner.id);
+    referralFd.set("notes", "Cliente precisa de suporte contábil urgente");
+    const redirectUrl = await expectRedirect(createPartnerReferral(companyId, referralFd));
+    expect(redirectUrl).toBe(`/empresas/${companyId}`);
+
+    const referral = await prisma.partnerReferral.findFirstOrThrow({ where: { companyId, partnerId: partner.id } });
+    expect(referral.status).toBe("indicado");
+    expect(referral.notes).toBe("Cliente precisa de suporte contábil urgente");
+
+    const statusFd = new FormData();
+    statusFd.set("status", "concluido");
+    await expectRedirect(updatePartnerReferralStatus(companyId, referral.id, statusFd));
+    const updated = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(updated.status).toBe("concluido");
+
+    await expectRedirect(deletePartnerReferral(companyId, referral.id));
+    expect(await prisma.partnerReferral.findUnique({ where: { id: referral.id } })).toBeNull();
+  });
+
+  it("rejects a referral to a partner that does not exist", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Indicação Inválida");
+    const referralFd = new FormData();
+    referralFd.set("partnerId", "id-que-nao-existe");
+    const redirectUrl = await expectRedirect(createPartnerReferral(companyId, referralFd));
+    expect(redirectUrl).toBe(`/empresas/${companyId}?error=parceiro-invalido`);
+    expect(await prisma.partnerReferral.count({ where: { companyId } })).toBe(0);
+  });
+
+  it("blocks updating a referral that belongs to a different company", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Indicação Dono");
+    const otherCompanyId = await createTestCompanyId("Empresa Integração Indicação Intrusa");
+
+    const partnerFd = new FormData();
+    partnerFd.set("name", "Parceiro Cross-Company");
+    partnerFd.set("type", "operacional");
+    partnerFd.set("category", "Engenharia");
+    await expectRedirect(createPartner(partnerFd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro Cross-Company" } });
+
+    const referralFd = new FormData();
+    referralFd.set("partnerId", partner.id);
+    await expectRedirect(createPartnerReferral(companyId, referralFd));
+    const referral = await prisma.partnerReferral.findFirstOrThrow({ where: { companyId } });
+
+    const statusFd = new FormData();
+    statusFd.set("status", "concluido");
+    await expectNotFound(updatePartnerReferralStatus(otherCompanyId, referral.id, statusFd));
+
+    const unchanged = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(unchanged.status).toBe("indicado");
   });
 });

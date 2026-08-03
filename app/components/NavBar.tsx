@@ -13,6 +13,7 @@ import {
   PlugIcon,
   UsersIcon,
   PortalIcon,
+  HandshakeIcon,
 } from "@/app/components/icons";
 
 const LINKS = [
@@ -22,6 +23,7 @@ const LINKS = [
   { href: "/portal", label: "Portal", icon: PortalIcon, roles: ["cliente"] },
   { href: "/agentes", label: "Agentes de IA", icon: SparklesIcon, roles: ["admin", "consultor", "cliente"] },
   { href: "/integracoes", label: "Integrações", icon: PlugIcon, roles: ["admin", "consultor", "cliente"] },
+  { href: "/parceiros", label: "Parceiros", icon: HandshakeIcon, roles: ["admin", "consultor"] },
 ];
 
 const ROLE_LABEL: Record<string, string> = {

@@ -173,6 +173,13 @@ const GROUPS: AgentGroup[] = [
         status: "ativo",
         seeItAt: { href: "/relatorios", label: "Ver no relatório" },
       },
+      {
+        name: "Agente de Sinergia entre Verticais",
+        description:
+          "Cruza perguntas fracas de verticais diferentes (Financeiro + Comercial, Marketing + Comercial, Pessoas + Estratégia, entre outras) que descrevem o mesmo problema por dois ângulos — cada módulo sozinho não veria a conexão. Junta a resposta mais recente de qualquer diagnóstico da empresa, completo ou de vertical isolada — regra de negócio, roda na página da empresa.",
+        status: "ativo",
+        seeItAt: { href: "/empresas", label: "Ver na página de uma empresa" },
+      },
     ],
   },
 ];

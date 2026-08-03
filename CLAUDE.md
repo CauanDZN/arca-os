@@ -20,12 +20,14 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
   layouts **não** compartilham JSX — uma mudança visual no relatório não se propaga pro PDF.
 - **Upload em `uploads/` no disco local**, não bucket externo. Não funciona em hospedagem
   serverless sem trocar para S3/Vercel Blob.
-- **8 verticais da Arca (`lib/verticals.ts`)** — as 12 áreas do questionário são mapeadas nas 8
+- **9 verticais da Arca (`lib/verticals.ts`)** — as 12 áreas do questionário são mapeadas nas 9
   verticais do pitch: Estratégia e Governança (`estrategia`); Financeiro e Controladoria
-  (`financeiro`); Comercial, Marketing e Sucesso do Cliente (`comercial`, `marketing`, `atendimento`);
-  Operações e Suprimentos (`operacoes`, `compras`); Pessoas e Cultura (`pessoas`); Tecnologia e Dados
-  (`tecnologia`); Fiscal, Jurídico e Compliance (`fiscal`, `juridico`); Gestão da Rotina e Indicadores
-  (`indicadores`). O teste unitário garante que toda área cai em exatamente uma vertical. Se uma área
+  (`financeiro`); Comercial, Growth e Sucesso do Cliente (`comercial`, `atendimento`); Marketing e
+  Comunicação (`marketing`) — vertical própria, separada de Comercial pra poder ser vendida isolada
+  (o plano estratégico da Arca trata as duas como ofertas distintas); Operações e Suprimentos
+  (`operacoes`, `compras`); Pessoas e Cultura (`pessoas`); Tecnologia e Dados (`tecnologia`); Fiscal,
+  Jurídico e Compliance (`fiscal`, `juridico`); Gestão da Rotina e Indicadores (`indicadores`). O
+  teste unitário garante que toda área cai em exatamente uma vertical. Se uma área
   for renomeada/removida, atualize `verticals.ts` junto — o build não pega.
 - **Motor de maturidade Nível 1–5 (`lib/scoring.ts`)** — `maturityLevelForScore(avg)` usa limiares
   < 1 → Nível 1, < 2 → Nível 2, < 3 → Nível 3, < 4 → Nível 4, resto → Nível 5 (ou seja, nota 3.0 já
@@ -51,6 +53,26 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
   `generateNarrativeAction`, acionado pelo botão "Gerar análise consultiva com IA" no relatório
   (que redireciona pra `#sumario`). Nunca lança erro — sem chave ou com falha de rede,
   `generateAiNarrative`/`generateMaturityEvolution` retornam `null` silenciosamente.
+- **Playbook de Execução por vertical (`lib/playbooks.ts`)** — passo a passo padrão de implantação,
+  igual pra qualquer cliente da mesma vertical, independente de nota de diagnóstico (conteúdo
+  extraído do "Nível 2" de cada vertical no plano estratégico). `approveVerticalActionPlan`
+  (`app/actions-module.ts`) cria um segundo épico no Kanban a partir dele, separado do "Plano de
+  Ação" que vem das respostas fracas do diagnóstico — dois épicos por aprovação, não um. Diagnóstico
+  aprovado antes do playbook existir **não** ganha o épico retroativamente; o relatório do módulo
+  checa se o épico existe de verdade antes de dizer "já criado" (`playbookAlreadyCreated`).
+- **Agente de Sinergia entre Verticais (`lib/synergy.ts`)** — regra fixa (mesma filosofia de
+  `lib/governance.ts`), não IA: cruza pares de perguntas fracas de **verticais diferentes** que
+  descrevem o mesmo problema por dois ângulos (ex.: Financeiro q10 + Comercial q10 = precificação
+  sem base de custo). Só dispara com os dois lados respondidos e fracos (nota ≤ 2). Roda na página
+  da empresa (`app/empresas/[id]/page.tsx`), juntando a resposta mais recente de qualquer
+  diagnóstico da empresa — completo ou de vertical isolada — não só do diagnóstico mais recente.
+- **Integrações de ERP são genéricas (`ErpConnection`, não colunas na `Company`)** — um provedor por
+  empresa (`@@unique([companyId, provider])`); hoje só `provider: "omie"` está implementado
+  (`lib/omie.ts` + `app/actions-omie.ts`), mas TOTVS/Voalle (citados no diagrama do plano
+  estratégico) entram como uma nova `provider` sem migration de schema. Antes disso era
+  `Company.omieAppKey`/`omieAppSecret` — migrado via `20260803200403_generalize_erp_connections`
+  (cria a tabela, faz backfill das credenciais existentes, só then derruba as colunas antigas — sem
+  isso qualquer empresa já conectada perderia a credencial).
 
 ## Suíte de testes — como funciona e armadilhas
 

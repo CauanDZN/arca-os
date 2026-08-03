@@ -24,9 +24,15 @@ export const VERTICALS: Vertical[] = [
   },
   {
     key: "comercial",
-    name: "Comercial, Marketing e Sucesso do Cliente",
-    description: "Geração de receita, funil, marca e retenção.",
-    areaKeys: ["comercial", "marketing", "atendimento"],
+    name: "Comercial, Growth e Sucesso do Cliente",
+    description: "Geração de receita, funil de vendas e retenção de clientes.",
+    areaKeys: ["comercial", "atendimento"],
+  },
+  {
+    key: "marketing",
+    name: "Marketing e Comunicação",
+    description: "Posicionamento de marca, geração de demanda e presença digital.",
+    areaKeys: ["marketing"],
   },
   {
     key: "operacoes",

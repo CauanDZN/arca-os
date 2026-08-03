@@ -7,15 +7,19 @@ import { statusTone } from "@/lib/badge-tones";
 import type { MeetingMinutes } from "@/lib/ai";
 import { findAtRiskTasks } from "@/lib/pmo";
 import { buildOnboardingChecklist } from "@/lib/onboarding";
+import { findVerticalSynergies } from "@/lib/synergy";
 import { VERTICALS } from "@/lib/verticals";
 import { getSession } from "@/lib/auth";
 import { deleteCompany, updateOnboardingResponsible, updateContractedVerticals } from "@/app/actions-empresas";
 import { saveOmieCredentials, disconnectOmie, syncOmieFinancials } from "@/app/actions-omie";
+import { createPartnerReferral, updatePartnerReferralStatus, deletePartnerReferral } from "@/app/actions-partners";
+import { PARTNER_REFERRAL_STATUSES } from "@/lib/validation";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ConfirmButton } from "@/app/components/ConfirmButton";
 import { ScoreBar } from "@/app/components/ScoreBar";
 import { SubmitButton } from "@/app/components/SubmitButton";
+import type { BadgeTone } from "@/lib/badge-tones";
 import {
   FolderIcon,
   TrendingUpIcon,
@@ -24,15 +28,31 @@ import {
   ListChecksIcon,
   DocumentIcon,
   PlayCircleIcon,
+  HandshakeIcon,
 } from "@/app/components/icons";
 
-const OMIE_ERROR_MESSAGE: Record<string, string> = {
+const REFERRAL_STATUS_LABEL: Record<string, string> = {
+  indicado: "Indicado",
+  em_andamento: "Em andamento",
+  concluido: "Concluído",
+  perdido: "Perdido",
+};
+
+const REFERRAL_STATUS_TONE: Record<string, BadgeTone> = {
+  indicado: "neutral",
+  em_andamento: "managed",
+  concluido: "good",
+  perdido: "critical",
+};
+
+const PAGE_ERROR_MESSAGE: Record<string, string> = {
   "omie-validacao": "Informe a App Key e o App Secret da Omie.",
   "omie-credenciais": "Não foi possível conectar à Omie com essas credenciais — confira App Key e App Secret.",
   "omie-desconectado": "Conecte a Omie antes de sincronizar.",
+  "parceiro-invalido": "Selecione um parceiro válido.",
 };
 
-const OMIE_SUCCESS_MESSAGE: Record<string, string> = {
+const PAGE_SUCCESS_MESSAGE: Record<string, string> = {
   "omie-conectado": "Conectado à Omie com sucesso.",
 };
 
@@ -57,9 +77,16 @@ export default async function EmpresaDetailPage({
       },
       documents: { orderBy: { createdAt: "desc" }, take: 4 },
       meetingNotes: { orderBy: { createdAt: "desc" }, take: 2 },
+      erpConnections: true,
+      partnerReferrals: { orderBy: { createdAt: "desc" }, include: { partner: true } },
     },
   });
   if (!company) notFound();
+
+  const omieConnection = company.erpConnections.find((c) => c.provider === "omie") ?? null;
+
+  const allPartners =
+    session?.role !== "cliente" ? await prisma.partner.findMany({ orderBy: { name: "asc" } }) : [];
 
   const totalDocuments = await prisma.document.count({ where: { companyId: id } });
 
@@ -82,6 +109,24 @@ export default async function EmpresaDetailPage({
     );
     return { diagnostic: d, report };
   });
+
+  // Agente de Sinergia entre Verticais: junta a resposta mais recente de
+  // cada pergunta em qualquer diagnóstico da empresa (completo ou de uma
+  // vertical isolada) — company.diagnostics já vem em ordem ascendente de
+  // criação, então um Map por areaKey+questionId naturalmente fica só com a
+  // versão mais nova quando a mesma pergunta aparece em mais de um
+  // diagnóstico ao longo do tempo.
+  const latestAnswerByQuestion = new Map<string, { areaKey: string; questionId: string; score: number }>();
+  for (const diagnostic of company.diagnostics) {
+    for (const answer of diagnostic.answers) {
+      latestAnswerByQuestion.set(`${answer.areaKey}::${answer.questionId}`, {
+        areaKey: answer.areaKey,
+        questionId: answer.questionId,
+        score: answer.score,
+      });
+    }
+  }
+  const synergyAlerts = findVerticalSynergies([...latestAnswerByQuestion.values()]);
 
   // Generated on demand, from the report page (generateNarrativeAction in
   // app/actions.ts) — reading it here is free; it never calls Gemini live.
@@ -220,7 +265,7 @@ export default async function EmpresaDetailPage({
           </Card>
         )}
 
-        {(error && OMIE_ERROR_MESSAGE[error] || sucesso && OMIE_SUCCESS_MESSAGE[sucesso]) && (
+        {(error && PAGE_ERROR_MESSAGE[error] || sucesso && PAGE_SUCCESS_MESSAGE[sucesso]) && (
           <p
             className={
               error
@@ -228,7 +273,7 @@ export default async function EmpresaDetailPage({
                 : "text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2"
             }
           >
-            {error ? OMIE_ERROR_MESSAGE[error] : OMIE_SUCCESS_MESSAGE[sucesso!]}
+            {error ? PAGE_ERROR_MESSAGE[error] : PAGE_SUCCESS_MESSAGE[sucesso!]}
           </p>
         )}
 
@@ -236,13 +281,13 @@ export default async function EmpresaDetailPage({
           <Card>
             <div className="flex items-center justify-between gap-3 mb-3">
               <h2 className="font-semibold text-slate-900">Integração com a Omie</h2>
-              <Badge text={company.omieAppKey ? "Conectado" : "Não conectado"} tone={company.omieAppKey ? "good" : "neutral"} />
+              <Badge text={omieConnection ? "Conectado" : "Não conectado"} tone={omieConnection ? "good" : "neutral"} />
             </div>
             <p className="text-xs text-slate-500 mb-3">
               Traz contas a pagar/receber da Omie e alimenta os indicadores &quot;Inadimplência&quot; e
               &quot;Endividamento&quot; do Cockpit de Performance automaticamente, sem digitação manual.
             </p>
-            {company.omieAppKey ? (
+            {omieConnection ? (
               <div className="flex flex-wrap items-center gap-2">
                 <form action={syncOmieFinancials.bind(null, id)}>
                   <SubmitButton
@@ -291,6 +336,104 @@ export default async function EmpresaDetailPage({
         {session?.role !== "cliente" && (
           <Card>
             <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="flex items-center gap-1.5 font-semibold text-slate-900">
+                <HandshakeIcon className="w-4 h-4 text-slate-400" />
+                Parceiros indicados
+              </h2>
+              <Link href="/parceiros" className="text-xs text-blue-700 hover:underline">
+                Ver todos os parceiros →
+              </Link>
+            </div>
+            {allPartners.length === 0 ? (
+              <p className="text-xs text-slate-400">
+                Nenhum parceiro cadastrado ainda —{" "}
+                <Link href="/parceiros" className="text-blue-700 hover:underline">
+                  cadastre um
+                </Link>{" "}
+                pra poder indicar.
+              </p>
+            ) : (
+              <form
+                action={createPartnerReferral.bind(null, id)}
+                className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 mb-4"
+              >
+                <select name="partnerId" required className="rounded-md border border-slate-300 px-2.5 py-2 text-sm bg-white">
+                  <option value="">Selecionar parceiro...</option>
+                  {allPartners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.category})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  name="notes"
+                  placeholder="Observação (opcional)"
+                  className="rounded-md border border-slate-300 px-2.5 py-2 text-sm"
+                />
+                <SubmitButton
+                  pendingText="Indicando..."
+                  className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors"
+                >
+                  Indicar
+                </SubmitButton>
+              </form>
+            )}
+            {company.partnerReferrals.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhum parceiro indicado pra essa empresa ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {company.partnerReferrals.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800">
+                        {r.partner.name} <span className="text-xs text-slate-400">({r.partner.category})</span>
+                      </p>
+                      {r.notes && <p className="text-xs text-slate-500">{r.notes}</p>}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge text={REFERRAL_STATUS_LABEL[r.status]} tone={REFERRAL_STATUS_TONE[r.status]} />
+                      <form action={updatePartnerReferralStatus.bind(null, id, r.id)} className="flex items-center gap-1">
+                        <select
+                          name="status"
+                          defaultValue={r.status}
+                          aria-label={`Status da indicação de ${r.partner.name}`}
+                          className="rounded-md border border-slate-300 px-1.5 py-1 text-xs bg-white"
+                        >
+                          {PARTNER_REFERRAL_STATUSES.map((status) => (
+                            <option key={status} value={status}>
+                              {REFERRAL_STATUS_LABEL[status]}
+                            </option>
+                          ))}
+                        </select>
+                        <SubmitButton
+                          pendingText="..."
+                          className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors"
+                        >
+                          Salvar
+                        </SubmitButton>
+                      </form>
+                      <form action={deletePartnerReferral.bind(null, id, r.id)}>
+                        <SubmitButton
+                          pendingText="..."
+                          className="text-xs text-red-600 hover:underline disabled:no-underline"
+                        >
+                          Remover
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {session?.role !== "cliente" && (
+          <Card>
+            <div className="flex items-center justify-between gap-3 mb-3">
               <h2 className="font-semibold text-slate-900">Verticais contratadas</h2>
               <Badge text={`${contractedVerticals.length}/${VERTICALS.length}`} tone="managed" />
             </div>
@@ -323,6 +466,35 @@ export default async function EmpresaDetailPage({
                 Salvar verticais contratadas
               </SubmitButton>
             </form>
+          </Card>
+        )}
+
+        {session?.role !== "cliente" && synergyAlerts.length > 0 && (
+          <Card className="border-blue-200 bg-blue-50/50">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
+              <SparklesIcon className="w-4 h-4" />
+              Agente de Sinergia entre Verticais
+            </p>
+            <p className="text-xs text-slate-500 mb-3">
+              Cruza perguntas fracas de verticais diferentes que descrevem o mesmo problema por dois
+              ângulos — cada módulo sozinho não veria a conexão.
+            </p>
+            <div className="space-y-3">
+              {synergyAlerts.map((alert) => (
+                <div key={alert.key} className="rounded-lg border border-blue-100 bg-white p-3">
+                  <p className="text-sm font-semibold text-slate-900 mb-1">{alert.title}</p>
+                  <p className="text-sm text-slate-700 mb-2">{alert.insight}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                    {alert.findings.map((f, i) => (
+                      <span key={i}>
+                        <span className="font-medium text-slate-600">{f.areaName}:</span> {f.questionText} (nota{" "}
+                        {f.score})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
         )}
 
