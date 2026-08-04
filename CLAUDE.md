@@ -84,6 +84,20 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
   parceiro: `PartnerReferral.commissionPercent`/`commissionValue` são entrada manual, não calculados.
   `lib/contracts.ts` também tem `totalActiveMrr()`, mostrado como badge no card de Contratos da
   empresa.
+- **Os 5 modelos de receita de parceria do plano (p. 19) vivem em `Partner`, não em
+  `PartnerReferral`** — só Comissionamento é por indicação (`commissionPercent`/`commissionValue`,
+  já citado acima); Fee de Curadoria (`curationFeeValue`) e Revenue Share (`revenueSharePercent`)
+  são termos do relacionamento com o parceiro como um todo, não de uma indicação específica —
+  colocar esses dois em `PartnerReferral` faria uma taxa recorrente parecer ligada a um cliente só.
+  Coparticipação e White Label não têm campo numérico próprio, só o enum `revenueModel` — descrevem
+  como o trabalho é dividido/rotulado, não quanto se cobra.
+- **KPIs da Vertical Parceira (`lib/partners.ts`, cartão no topo de `/parceiros`)** — os 6 KPIs do
+  plano (p. 16). Receita indireta é soma direta de `commissionValue`; os outros 4
+  (`averageClientSatisfaction`, `averageNps`, `repeatPartnerRate`, `slaComplianceRate`) são funções
+  puras agregando dado que já existe, sem coluna nova de "métrica calculada". SLA realizado
+  (`PartnerReferral.respondedAt`, setado pelo botão "Marcar resposta do parceiro agora") só entra na
+  conta quando o parceiro tem `slaHours` definido — referral sem resposta ainda ou parceiro sem meta
+  não contam nem como sucesso nem como falha, ficam de fora do denominador.
 
 ## Suíte de testes — como funciona e armadilhas
 

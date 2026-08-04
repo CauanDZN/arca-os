@@ -7,6 +7,7 @@ export type Session = {
   role: Role;
   title: string;
   companyId?: string; // only for role "cliente", resolved once at login time
+  assignedVerticals?: string[]; // only for role "consultor"; empty/absent = unrestricted, sees the whole portfolio
 };
 
 export const SESSION_COOKIE_NAME = "arca_session";

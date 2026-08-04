@@ -5,6 +5,7 @@ import { verticalAverages as computeVerticalAverages, type VerticalAverage } fro
 import { findAtRiskTasks, type PmoAlertReason } from "@/lib/pmo";
 import type { BadgeTone } from "@/lib/badge-tones";
 import type { Session } from "@/lib/session";
+import { getConsultorVerticalScope } from "@/lib/access";
 
 export type CompanyForDashboard = {
   id: string;
@@ -194,7 +195,15 @@ export async function buildDashboardData(session: Session | null): Promise<Dashb
     orderBy: { name: "asc" },
   });
 
-  return aggregateDashboard(companies);
+  const scope = getConsultorVerticalScope(session);
+  const scoped = scope
+    ? companies.filter((c) => {
+        const contracted: string[] = JSON.parse(c.contractedVerticals || "[]");
+        return contracted.some((key) => scope.includes(key));
+      })
+    : companies;
+
+  return aggregateDashboard(scoped);
 }
 
 export type Observation = { text: string; tone: BadgeTone };

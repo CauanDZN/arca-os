@@ -4,7 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { userSchema } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
 import type { Session } from "@/lib/session";
+import { VERTICALS } from "@/lib/verticals";
 import { redirect, notFound } from "next/navigation";
+
+const VERTICAL_KEYS = new Set(VERTICALS.map((v) => v.key));
+
+// Só role "consultor" carrega escopo — atribuir verticais a admin/cliente não
+// tem efeito (admin sempre vê tudo, cliente é escopado pela própria empresa),
+// então a gente nem grava lixo no banco pra esses papéis.
+function resolveAssignedVerticals(role: string, formData: FormData): string {
+  if (role !== "consultor") return "[]";
+  const selected = formData.getAll("assignedVerticals").map(String).filter((key) => VERTICAL_KEYS.has(key));
+  return JSON.stringify(selected);
+}
 
 async function requireAdmin(): Promise<Session> {
   const session = await getSession();
@@ -41,8 +53,9 @@ export async function createUser(formData: FormData) {
   if (existing) redirect("/usuarios?error=email-existe");
 
   const companyId = await resolveCompanyId(parsed.data.role, parsed.data.companyId);
+  const assignedVerticals = resolveAssignedVerticals(parsed.data.role, formData);
 
-  await prisma.user.create({ data: { ...parsed.data, email, companyId } });
+  await prisma.user.create({ data: { ...parsed.data, email, companyId, assignedVerticals } });
   redirect("/usuarios?sucesso=criado");
 }
 
@@ -56,8 +69,9 @@ export async function updateUserRole(userId: string, formData: FormData) {
 
   const rawCompanyId = String(formData.get("companyId") ?? "").trim();
   const companyId = await resolveCompanyId(role, rawCompanyId === "" ? null : rawCompanyId);
+  const assignedVerticals = resolveAssignedVerticals(role, formData);
 
-  await prisma.user.update({ where: { id: userId }, data: { role, companyId } });
+  await prisma.user.update({ where: { id: userId }, data: { role, companyId, assignedVerticals } });
   redirect("/usuarios");
 }
 

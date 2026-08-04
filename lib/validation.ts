@@ -94,6 +94,15 @@ export const omieCredentialsSchema = z.object({
 export const PARTNER_TYPES = ["operacional", "estrategica", "comercial"] as const;
 export const PARTNER_HOMOLOGATION_STATUSES = ["pendente", "homologado", "suspenso"] as const;
 export const PARTNER_REFERRAL_STATUSES = ["indicado", "em_andamento", "concluido", "perdido"] as const;
+// Os 5 modelos de receita de parceria do plano (p. 19) — ver comentário em
+// Partner no schema.prisma pra por que só comissionamento vive na indicação.
+export const PARTNER_REVENUE_MODELS = [
+  "comissionamento",
+  "coparticipacao",
+  "fee_curadoria",
+  "revenue_share",
+  "white_label",
+] as const;
 
 export const partnerSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome do parceiro.").max(160),
@@ -101,6 +110,13 @@ export const partnerSchema = z.object({
   category: z.string().trim().min(1, "Informe a categoria.").max(80),
   contactInfo: optionalTrimmedString(300),
   slaHours: z.coerce.number().int().min(0).max(720).optional(),
+  revenueModel: z.enum(PARTNER_REVENUE_MODELS).default("comissionamento"),
+  curationFeeValue: z.coerce.number().min(0).optional(),
+  revenueSharePercent: z.coerce.number().min(0).max(100).optional(),
+});
+
+export const partnerNpsSchema = z.object({
+  npsScore: z.coerce.number().int().min(-100).max(100),
 });
 
 export const partnerReferralSchema = z.object({
@@ -108,9 +124,10 @@ export const partnerReferralSchema = z.object({
   notes: optionalTrimmedString(300),
 });
 
-export const partnerCommissionSchema = z.object({
+export const partnerReferralFeedbackSchema = z.object({
   commissionPercent: z.coerce.number().min(0).max(100).optional(),
   commissionValue: z.coerce.number().min(0).optional(),
+  clientSatisfaction: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 // Estrutura de receita Arca BTO (plano estratégico, p. 24). value é

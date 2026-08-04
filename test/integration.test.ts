@@ -92,10 +92,12 @@ import { deleteCompany } from "@/app/actions-empresas";
 import {
   createPartner,
   updatePartnerHomologation,
+  updatePartnerNps,
   deletePartner,
   createPartnerReferral,
   updatePartnerReferralStatus,
-  updatePartnerReferralCommission,
+  updatePartnerReferralFeedback,
+  markReferralResponded,
   deletePartnerReferral,
 } from "@/app/actions-partners";
 import {
@@ -1319,7 +1321,7 @@ describe("Indicação de parceiro (createPartnerReferral/updatePartnerReferralSt
     expect(unchanged.status).toBe("indicado");
   });
 
-  it("records a negotiated commission on a referral, and clears it when the fields are left blank", async () => {
+  it("records a negotiated commission and client satisfaction on a referral, and clears them when left blank", async () => {
     const companyId = await createTestCompanyId("Empresa Integração Comissão");
     const partnerFd = new FormData();
     partnerFd.set("name", "Parceiro Comissionado");
@@ -1333,23 +1335,138 @@ describe("Indicação de parceiro (createPartnerReferral/updatePartnerReferralSt
     await expectRedirect(createPartnerReferral(companyId, referralFd));
     const referral = await prisma.partnerReferral.findFirstOrThrow({ where: { companyId } });
 
-    const commissionFd = new FormData();
-    commissionFd.set("commissionPercent", "10");
-    commissionFd.set("commissionValue", "1500");
-    await expectRedirect(updatePartnerReferralCommission(companyId, referral.id, commissionFd));
+    const feedbackFd = new FormData();
+    feedbackFd.set("commissionPercent", "10");
+    feedbackFd.set("commissionValue", "1500");
+    feedbackFd.set("clientSatisfaction", "95");
+    await expectRedirect(updatePartnerReferralFeedback(companyId, referral.id, feedbackFd));
 
-    const withCommission = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
-    expect(withCommission.commissionPercent).toBe(10);
-    expect(withCommission.commissionValue).toBe(1500);
+    const withFeedback = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(withFeedback.commissionPercent).toBe(10);
+    expect(withFeedback.commissionValue).toBe(1500);
+    expect(withFeedback.clientSatisfaction).toBe(95);
 
     const clearFd = new FormData();
     clearFd.set("commissionPercent", "");
     clearFd.set("commissionValue", "");
-    await expectRedirect(updatePartnerReferralCommission(companyId, referral.id, clearFd));
+    clearFd.set("clientSatisfaction", "");
+    await expectRedirect(updatePartnerReferralFeedback(companyId, referral.id, clearFd));
 
     const cleared = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
     expect(cleared.commissionPercent).toBeNull();
     expect(cleared.commissionValue).toBeNull();
+    expect(cleared.clientSatisfaction).toBeNull();
+  });
+});
+
+describe("Vertical Parceira — modelos de receita e KPIs (p. 16 e 19 do plano)", () => {
+  it("creates partners under each of the 5 revenue models from the plan", async () => {
+    const models = ["comissionamento", "coparticipacao", "fee_curadoria", "revenue_share", "white_label"] as const;
+    for (const model of models) {
+      const fd = new FormData();
+      fd.set("name", `Parceiro ${model}`);
+      fd.set("type", "estrategica");
+      fd.set("category", "SaaS");
+      fd.set("revenueModel", model);
+      if (model === "fee_curadoria") fd.set("curationFeeValue", "5000");
+      if (model === "revenue_share") fd.set("revenueSharePercent", "8");
+      await expectRedirect(createPartner(fd));
+    }
+
+    const created = await prisma.partner.findMany({
+      where: { name: { in: models.map((m) => `Parceiro ${m}`) } },
+    });
+    expect(created.map((p) => p.revenueModel).sort()).toEqual([...models].sort());
+
+    const curadoria = created.find((p) => p.revenueModel === "fee_curadoria")!;
+    expect(curadoria.curationFeeValue).toBe(5000);
+    const revShare = created.find((p) => p.revenueModel === "revenue_share")!;
+    expect(revShare.revenueSharePercent).toBe(8);
+  });
+
+  it("defaults to 'comissionamento' when no revenue model is chosen", async () => {
+    const fd = new FormData();
+    fd.set("name", "Parceiro Modelo Padrão");
+    fd.set("type", "operacional");
+    fd.set("category", "Jurídico");
+    await expectRedirect(createPartner(fd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro Modelo Padrão" } });
+    expect(partner.revenueModel).toBe("comissionamento");
+  });
+
+  it("updates the NPS Arca Partner score for a partner", async () => {
+    const fd = new FormData();
+    fd.set("name", "Parceiro NPS");
+    fd.set("type", "comercial");
+    fd.set("category", "Associação");
+    await expectRedirect(createPartner(fd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro NPS" } });
+
+    const npsFd = new FormData();
+    npsFd.set("npsScore", "88");
+    await expectRedirect(updatePartnerNps(partner.id, npsFd));
+
+    const updated = await prisma.partner.findUniqueOrThrow({ where: { id: partner.id } });
+    expect(updated.npsScore).toBe(88);
+  });
+
+  it("rejects an out-of-range NPS score", async () => {
+    const fd = new FormData();
+    fd.set("name", "Parceiro NPS Inválido");
+    fd.set("type", "comercial");
+    fd.set("category", "Associação");
+    await expectRedirect(createPartner(fd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro NPS Inválido" } });
+
+    const npsFd = new FormData();
+    npsFd.set("npsScore", "150");
+    const redirectUrl = await expectRedirect(updatePartnerNps(partner.id, npsFd));
+    expect(redirectUrl).toBe("/parceiros?error=validacao");
+
+    const unchanged = await prisma.partner.findUniqueOrThrow({ where: { id: partner.id } });
+    expect(unchanged.npsScore).toBeNull();
+  });
+
+  it("marks a referral as responded, recording respondedAt for SLA tracking", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração SLA");
+    const partnerFd = new FormData();
+    partnerFd.set("name", "Parceiro SLA");
+    partnerFd.set("type", "operacional");
+    partnerFd.set("category", "Facilities");
+    partnerFd.set("slaHours", "48");
+    await expectRedirect(createPartner(partnerFd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro SLA" } });
+
+    const referralFd = new FormData();
+    referralFd.set("partnerId", partner.id);
+    await expectRedirect(createPartnerReferral(companyId, referralFd));
+    const referral = await prisma.partnerReferral.findFirstOrThrow({ where: { companyId } });
+    expect(referral.respondedAt).toBeNull();
+
+    await expectRedirect(markReferralResponded(companyId, referral.id));
+
+    const responded = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(responded.respondedAt).not.toBeNull();
+  });
+
+  it("blocks marking a referral as responded for a company mismatch", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração SLA Dono");
+    const otherCompanyId = await createTestCompanyId("Empresa Integração SLA Intrusa");
+    const partnerFd = new FormData();
+    partnerFd.set("name", "Parceiro SLA Cross-Company");
+    partnerFd.set("type", "operacional");
+    partnerFd.set("category", "Facilities");
+    await expectRedirect(createPartner(partnerFd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro SLA Cross-Company" } });
+
+    const referralFd = new FormData();
+    referralFd.set("partnerId", partner.id);
+    await expectRedirect(createPartnerReferral(companyId, referralFd));
+    const referral = await prisma.partnerReferral.findFirstOrThrow({ where: { companyId } });
+
+    await expectNotFound(markReferralResponded(otherCompanyId, referral.id));
+    const unchanged = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(unchanged.respondedAt).toBeNull();
   });
 });
 

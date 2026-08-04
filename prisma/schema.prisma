@@ -18,6 +18,7 @@ model User {
   role      String   @default("consultor") // admin | consultor | cliente
   title     String   @default("") // cargo na visão organizacional da Arca (seção 16 do pitch do Cícero)
   companyId String? // vínculo real com uma empresa (role "cliente") — definido na tela /usuarios
+  assignedVerticals String @default("[]") // JSON-encoded array de chaves de lib/verticals.ts — só role "consultor". Vazio = sem escopo, vê a carteira inteira (equipe pequena/admin); preenchido restringe a lista de empresas e o acesso a /empresas/[id]/modulo/[x] às verticais atribuídas (organograma por vertical do plano estratégico, p. 22)
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -103,29 +104,43 @@ model ContractPerformanceRecord {
 // diagnóstico como as 9 de lib/verticals.ts (sem área/perguntas no
 // questionário); é um cadastro de parceiros homologados da Arca e o registro
 // de quando um deles foi indicado pra uma empresa cliente.
+// revenueModel é o modelo comercial que a Arca tem com O PARCEIRO (recorrente,
+// da relação em si) — os 5 modelos de receita de parceria do plano (p. 19).
+// Comissionamento é por indicação (PartnerReferral.commissionPercent/Value);
+// os outros 4 são atributos do parceiro, não de uma indicação específica:
+// Fee de Curadoria é uma taxa fixa pela homologação (curationFeeValue),
+// Revenue Share é % sobre o faturamento mensal do PRÓPRIO parceiro
+// (revenueSharePercent), Coparticipação e White Label não têm um número fixo
+// — descrevem como o trabalho é dividido/rotulado, não quanto se cobra.
 model Partner {
-  id                 String            @id @default(cuid())
-  name               String
-  type               String // operacional | estrategica | comercial — as 3 categorias de parceria do plano
-  category           String // ex.: "Jurídico", "Engenharia", "SaaS", "Fintech" — texto livre
-  contactInfo        String            @default("")
-  homologationStatus String            @default("pendente") // pendente | homologado | suspenso
-  slaHours           Int? // meta de SLA de atendimento em horas (plano: ≤48h)
-  createdAt          DateTime          @default(now())
-  referrals          PartnerReferral[]
+  id                  String            @id @default(cuid())
+  name                String
+  type                String // operacional | estrategica | comercial — as 3 categorias de parceria do plano
+  category            String // ex.: "Jurídico", "Engenharia", "SaaS", "Fintech" — texto livre
+  contactInfo         String            @default("")
+  homologationStatus  String            @default("pendente") // pendente | homologado | suspenso
+  slaHours            Int? // meta de SLA de atendimento em horas (plano: ≤48h) — o realizado vem de PartnerReferral.respondedAt
+  revenueModel        String            @default("comissionamento") // comissionamento | coparticipacao | fee_curadoria | revenue_share | white_label
+  curationFeeValue    Float? // Fee de Curadoria: taxa fixa em R$ pela gestão/homologação — só revenueModel="fee_curadoria"
+  revenueSharePercent Float? // Revenue Share: % sobre o faturamento mensal do parceiro — só revenueModel="revenue_share"
+  npsScore            Int? // NPS Arca Partner (-100 a 100) — leitura mais recente, atualizada manualmente
+  createdAt           DateTime          @default(now())
+  referrals           PartnerReferral[]
 }
 
 model PartnerReferral {
-  id                String   @id @default(cuid())
-  partnerId         String
-  partner           Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  companyId         String
-  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  status            String   @default("indicado") // indicado | em_andamento | concluido | perdido
-  notes             String   @default("")
-  commissionPercent Float? // % de comissão negociada com o parceiro sobre esta indicação
-  commissionValue   Float? // valor apurado em R$ — preenchido quando a indicação vira negócio (status concluido)
-  createdAt         DateTime @default(now())
+  id                 String    @id @default(cuid())
+  partnerId          String
+  partner            Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status             String    @default("indicado") // indicado | em_andamento | concluido | perdido
+  notes              String    @default("")
+  commissionPercent  Float? // % de comissão negociada com o parceiro sobre esta indicação
+  commissionValue    Float? // valor apurado em R$ — preenchido quando a indicação vira negócio (status concluido)
+  clientSatisfaction Int? // satisfação do cliente com o parceiro nesta indicação, 0–100 (plano: ≥90%)
+  respondedAt        DateTime? // quando o parceiro de fato respondeu/engajou — mede o SLA realizado contra Partner.slaHours
+  createdAt          DateTime  @default(now())
 }
 
 // Um provedor de ERP por empresa (@@unique). Antes disso era Company.omieAppKey/

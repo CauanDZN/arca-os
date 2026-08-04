@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { createUser, updateUserRole, deleteUser } from "@/app/actions-users";
+import { VERTICALS } from "@/lib/verticals";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ConfirmButton } from "@/app/components/ConfirmButton";
@@ -147,6 +148,23 @@ export default async function UsuariosPage({
                 ))}
               </select>
             </label>
+            <label className="block sm:col-span-2">
+              <span className="block text-xs font-medium text-slate-600 mb-1">
+                Verticais atribuídas (só Consultor — vazio = vê a carteira inteira)
+              </span>
+              <select
+                name="assignedVerticals"
+                multiple
+                size={5}
+                className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm bg-white"
+              >
+                {VERTICALS.map((v) => (
+                  <option key={v.key} value={v.key}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="sm:col-span-2">
               <SubmitButton
                 pendingText="Criando..."
@@ -163,7 +181,9 @@ export default async function UsuariosPage({
             {users.length} {users.length === 1 ? "usuário" : "usuários"}
           </h2>
           <div className="space-y-2">
-            {users.map((u) => (
+            {users.map((u) => {
+              const userAssignedVerticals: string[] = JSON.parse(u.assignedVerticals || "[]");
+              return (
               <div
                 key={u.id}
                 className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 rounded-lg border border-slate-200 p-4"
@@ -179,6 +199,16 @@ export default async function UsuariosPage({
                   <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
                   {u.company && (
                     <p className="text-xs text-blue-700 mt-0.5">Empresa: {u.company.name}</p>
+                  )}
+                  {u.role === "consultor" && (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Escopo:{" "}
+                      {userAssignedVerticals.length === 0
+                        ? "carteira inteira"
+                        : userAssignedVerticals
+                            .map((k) => VERTICALS.find((v) => v.key === k)?.name ?? k)
+                            .join(", ")}
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -212,6 +242,21 @@ export default async function UsuariosPage({
                         </option>
                       ))}
                     </select>
+                    <select
+                      name="assignedVerticals"
+                      multiple
+                      defaultValue={userAssignedVerticals}
+                      aria-label={`Verticais atribuídas a ${u.name}`}
+                      title="Verticais atribuídas (só Consultor — vazio = carteira inteira)"
+                      size={3}
+                      className="rounded-md border border-slate-300 px-1.5 py-1 text-xs focus:outline-none bg-white max-w-40"
+                    >
+                      {VERTICALS.map((v) => (
+                        <option key={v.key} value={v.key}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
                     <SubmitButton
                       pendingText="Salvando..."
                       className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors"
@@ -230,7 +275,8 @@ export default async function UsuariosPage({
                   </form>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       </div>

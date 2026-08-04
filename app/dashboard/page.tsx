@@ -63,7 +63,7 @@ export default async function DashboardPage() {
         <Card>
           <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">
             <DashboardIcon className="w-4 h-4" />
-            ArcaOS
+            Arca Dashboard
           </p>
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Dashboard de Análise</h1>
           <p className="text-slate-600 text-sm">

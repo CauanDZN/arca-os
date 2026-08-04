@@ -10,12 +10,14 @@ import { buildOnboardingChecklist } from "@/lib/onboarding";
 import { findVerticalSynergies } from "@/lib/synergy";
 import { VERTICALS } from "@/lib/verticals";
 import { getSession } from "@/lib/auth";
+import { isCompanyInConsultorScope } from "@/lib/access";
 import { deleteCompany, updateOnboardingResponsible, updateContractedVerticals } from "@/app/actions-empresas";
 import { saveOmieCredentials, disconnectOmie, syncOmieFinancials } from "@/app/actions-omie";
 import {
   createPartnerReferral,
   updatePartnerReferralStatus,
-  updatePartnerReferralCommission,
+  updatePartnerReferralFeedback,
+  markReferralResponded,
   deletePartnerReferral,
 } from "@/app/actions-partners";
 import {
@@ -117,6 +119,7 @@ export default async function EmpresaDetailPage({
     },
   });
   if (!company) notFound();
+  if (!isCompanyInConsultorScope(session, JSON.parse(company.contractedVerticals || "[]"))) notFound();
 
   const omieConnection = company.erpConnections.find((c) => c.provider === "omie") ?? null;
   const activeMrr = totalActiveMrr(company.contracts);
@@ -382,7 +385,10 @@ export default async function EmpresaDetailPage({
             </div>
             <p className="text-xs text-slate-500 mb-3">
               Estrutura de receita Arca BTO — Setup Inicial, Mensalidade Fixa (MRR), Performance Fee e
-              Projetos Avulsos. Registro comercial da Arca, não aparece pro cliente.
+              Projetos Avulsos. Registro comercial da Arca, não aparece pro cliente.{" "}
+              <Link href={`/empresas/${id}/proposta`} className="text-blue-700 hover:underline font-medium">
+                Montar proposta modular (várias verticais de uma vez) →
+              </Link>
             </p>
             <form action={createContract.bind(null, id)} className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <label className="block">
@@ -618,7 +624,7 @@ export default async function EmpresaDetailPage({
                       </div>
                     </div>
                     <form
-                      action={updatePartnerReferralCommission.bind(null, id, r.id)}
+                      action={updatePartnerReferralFeedback.bind(null, id, r.id)}
                       className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100"
                     >
                       <span className="text-[11px] text-slate-400">Comissão:</span>
@@ -643,10 +649,42 @@ export default async function EmpresaDetailPage({
                         aria-label={`Valor de comissão apurado de ${r.partner.name}`}
                         className="w-28 rounded-md border border-slate-300 px-1.5 py-1 text-xs"
                       />
+                      <span className="text-[11px] text-slate-400 ml-1">Satisfação:</span>
+                      <input
+                        type="number"
+                        name="clientSatisfaction"
+                        min={0}
+                        max={100}
+                        step="1"
+                        placeholder="%"
+                        defaultValue={r.clientSatisfaction ?? ""}
+                        aria-label={`Satisfação do cliente com ${r.partner.name}`}
+                        className="w-16 rounded-md border border-slate-300 px-1.5 py-1 text-xs"
+                      />
                       <SubmitButton pendingText="..." className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors">
                         Salvar
                       </SubmitButton>
                     </form>
+                    <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-400">
+                      {r.respondedAt ? (
+                        <span>
+                          Parceiro respondeu em{" "}
+                          {Math.round((r.respondedAt.getTime() - r.createdAt.getTime()) / (1000 * 60 * 60))}h
+                          {r.partner.slaHours != null &&
+                            ` (meta: ${r.partner.slaHours}h — ${
+                              (r.respondedAt.getTime() - r.createdAt.getTime()) / (1000 * 60 * 60) <= r.partner.slaHours
+                                ? "dentro do SLA"
+                                : "fora do SLA"
+                            })`}
+                        </span>
+                      ) : (
+                        <form action={markReferralResponded.bind(null, id, r.id)}>
+                          <SubmitButton pendingText="..." className="text-blue-700 hover:underline disabled:no-underline">
+                            Marcar resposta do parceiro agora
+                          </SubmitButton>
+                        </form>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

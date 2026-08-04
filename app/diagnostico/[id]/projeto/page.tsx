@@ -120,7 +120,7 @@ export default async function ProjetoPage({
               ← Voltar ao relatório
             </Link>
             <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mt-2">
-              Projeto de Execução Arca
+              Arca Planner · Projeto de Execução
             </p>
             <h1 className="text-2xl font-bold text-slate-900">{diagnostic.company.name}</h1>
           </div>

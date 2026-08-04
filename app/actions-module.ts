@@ -5,7 +5,7 @@ import { getVerticalByKey } from "@/lib/verticals";
 import { buildVerticalReport } from "@/lib/vertical-diagnostic";
 import { getPlaybookByVertical } from "@/lib/playbooks";
 import { getSession } from "@/lib/auth";
-import { assertCompanyAccess } from "@/lib/access";
+import { assertCompanyAccess, assertVerticalAccess } from "@/lib/access";
 import { redirect, notFound } from "next/navigation";
 
 /**
@@ -22,6 +22,7 @@ export async function startVerticalDiagnostic(companyId: string, verticalKey: st
   const session = await getSession();
   if (session?.role === "cliente") notFound(); // mesma regra de createDiagnostic: só a Arca inicia
   assertCompanyAccess(session, companyId);
+  assertVerticalAccess(session, verticalKey);
 
   const vertical = getVerticalByKey(verticalKey);
   if (!vertical) notFound();
@@ -41,6 +42,7 @@ export async function approveVerticalActionPlan(diagnosticId: string) {
   });
   if (!diagnostic) notFound();
   assertCompanyAccess(session, diagnostic.companyId);
+  assertVerticalAccess(session, diagnostic.scope);
 
   const vertical = getVerticalByKey(diagnostic.scope);
   if (!vertical) notFound();

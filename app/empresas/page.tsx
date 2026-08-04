@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { isCompanyInConsultorScope } from "@/lib/access";
 import { Card } from "@/app/components/Card";
 import { BuildingIcon, EmptyBoxIcon } from "@/app/components/icons";
 
 export default async function EmpresasPage() {
-  const companies = await prisma.company.findMany({
+  const session = await getSession();
+  const all = await prisma.company.findMany({
     orderBy: { createdAt: "desc" },
     include: { diagnostics: true, documents: true },
   });
+  const companies = all.filter((c) =>
+    isCompanyInConsultorScope(session, JSON.parse(c.contractedVerticals || "[]"))
+  );
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">

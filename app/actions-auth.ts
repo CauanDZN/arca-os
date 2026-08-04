@@ -26,6 +26,12 @@ export async function login(formData: FormData) {
     companyId = user.companyId;
   }
 
+  let assignedVerticals: string[] | undefined;
+  if (user.role === "consultor") {
+    const parsed: unknown = JSON.parse(user.assignedVerticals || "[]");
+    if (Array.isArray(parsed) && parsed.length > 0) assignedVerticals = parsed as string[];
+  }
+
   await setSessionCookie({
     userId: user.id,
     name: user.name,
@@ -33,6 +39,7 @@ export async function login(formData: FormData) {
     role: user.role as Role,
     title: user.title,
     companyId,
+    assignedVerticals,
   });
 
   redirect(user.role === "cliente" ? `/empresas/${companyId}` : "/empresas");

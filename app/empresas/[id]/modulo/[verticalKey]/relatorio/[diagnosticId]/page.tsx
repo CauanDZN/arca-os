@@ -7,7 +7,7 @@ import { getPlaybookByVertical } from "@/lib/playbooks";
 import { findEvidenceGaps } from "@/lib/audit";
 import { statusTone, maturityTone, priorityTone } from "@/lib/badge-tones";
 import { getSession } from "@/lib/auth";
-import { assertCompanyAccess } from "@/lib/access";
+import { assertCompanyAccess, assertVerticalAccess } from "@/lib/access";
 import { approveVerticalActionPlan } from "@/app/actions-module";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
@@ -28,7 +28,9 @@ export default async function ModuloVerticalRelatorioPage({
   params: Promise<{ id: string; verticalKey: string; diagnosticId: string }>;
 }) {
   const { id, verticalKey, diagnosticId } = await params;
-  assertCompanyAccess(await getSession(), id);
+  const session = await getSession();
+  assertCompanyAccess(session, id);
+  assertVerticalAccess(session, verticalKey);
 
   const diagnostic = await prisma.diagnostic.findUnique({
     where: { id: diagnosticId },

@@ -6,7 +6,7 @@ import { getAreaByKey } from "@/lib/areas";
 import { buildVerticalReport } from "@/lib/vertical-diagnostic";
 import { statusTone } from "@/lib/badge-tones";
 import { getSession } from "@/lib/auth";
-import { assertCompanyAccess } from "@/lib/access";
+import { assertCompanyAccess, assertVerticalAccess } from "@/lib/access";
 import { startVerticalDiagnostic } from "@/app/actions-module";
 import { uploadDocument, deleteDocument } from "@/app/actions-documents";
 import { Card } from "@/app/components/Card";
@@ -26,7 +26,9 @@ export default async function ModuloVerticalPage({
   params: Promise<{ id: string; verticalKey: string }>;
 }) {
   const { id, verticalKey } = await params;
-  assertCompanyAccess(await getSession(), id);
+  const session = await getSession();
+  assertCompanyAccess(session, id);
+  assertVerticalAccess(session, verticalKey);
 
   const vertical = getVerticalByKey(verticalKey);
   if (!vertical) notFound();
