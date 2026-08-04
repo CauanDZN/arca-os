@@ -95,8 +95,16 @@ import {
   deletePartner,
   createPartnerReferral,
   updatePartnerReferralStatus,
+  updatePartnerReferralCommission,
   deletePartnerReferral,
 } from "@/app/actions-partners";
+import {
+  createContract,
+  updateContractStatus,
+  deleteContract,
+  createPerformanceRecord,
+  deletePerformanceRecord,
+} from "@/app/actions-contracts";
 
 async function expectRedirect(promise: Promise<unknown>): Promise<string> {
   try {
@@ -1309,5 +1317,160 @@ describe("Indicação de parceiro (createPartnerReferral/updatePartnerReferralSt
 
     const unchanged = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
     expect(unchanged.status).toBe("indicado");
+  });
+
+  it("records a negotiated commission on a referral, and clears it when the fields are left blank", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Comissão");
+    const partnerFd = new FormData();
+    partnerFd.set("name", "Parceiro Comissionado");
+    partnerFd.set("type", "comercial");
+    partnerFd.set("category", "Franquia");
+    await expectRedirect(createPartner(partnerFd));
+    const partner = await prisma.partner.findFirstOrThrow({ where: { name: "Parceiro Comissionado" } });
+
+    const referralFd = new FormData();
+    referralFd.set("partnerId", partner.id);
+    await expectRedirect(createPartnerReferral(companyId, referralFd));
+    const referral = await prisma.partnerReferral.findFirstOrThrow({ where: { companyId } });
+
+    const commissionFd = new FormData();
+    commissionFd.set("commissionPercent", "10");
+    commissionFd.set("commissionValue", "1500");
+    await expectRedirect(updatePartnerReferralCommission(companyId, referral.id, commissionFd));
+
+    const withCommission = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(withCommission.commissionPercent).toBe(10);
+    expect(withCommission.commissionValue).toBe(1500);
+
+    const clearFd = new FormData();
+    clearFd.set("commissionPercent", "");
+    clearFd.set("commissionValue", "");
+    await expectRedirect(updatePartnerReferralCommission(companyId, referral.id, clearFd));
+
+    const cleared = await prisma.partnerReferral.findUniqueOrThrow({ where: { id: referral.id } });
+    expect(cleared.commissionPercent).toBeNull();
+    expect(cleared.commissionValue).toBeNull();
+  });
+});
+
+describe("Estrutura de receita (createContract/updateContractStatus/deleteContract)", () => {
+  it("creates a MRR contract with default 'ativo' status", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Contrato MRR");
+    const fd = new FormData();
+    fd.set("type", "mrr");
+    fd.set("verticalKey", "financeiro");
+    fd.set("value", "8000");
+    fd.set("startDate", "2026-01-01");
+    fd.set("endDate", "");
+    fd.set("notes", "Retainer mensal do módulo Financeiro");
+
+    const redirectUrl = await expectRedirect(createContract(companyId, fd));
+    expect(redirectUrl).toBe(`/empresas/${companyId}?sucesso=contrato-criado`);
+
+    const contract = await prisma.contract.findFirstOrThrow({ where: { companyId } });
+    expect(contract.status).toBe("ativo");
+    expect(contract.value).toBe(8000);
+    expect(contract.verticalKey).toBe("financeiro");
+    expect(contract.endDate).toBeNull();
+  });
+
+  it("rejects an unknown verticalKey by silently falling back to 'empresa toda'", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Contrato Vertical Inválida");
+    const fd = new FormData();
+    fd.set("type", "setup");
+    fd.set("verticalKey", "vertical-que-nao-existe");
+    fd.set("value", "20000");
+    fd.set("startDate", "2026-01-01");
+
+    await expectRedirect(createContract(companyId, fd));
+    const contract = await prisma.contract.findFirstOrThrow({ where: { companyId } });
+    expect(contract.verticalKey).toBeNull();
+  });
+
+  it("requires a value for setup/mrr/projeto_avulso and rejects when missing", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Contrato Sem Valor");
+    const fd = new FormData();
+    fd.set("type", "setup");
+    fd.set("startDate", "2026-01-01");
+
+    const redirectUrl = await expectRedirect(createContract(companyId, fd));
+    expect(redirectUrl).toBe(`/empresas/${companyId}?error=contrato-invalido`);
+    expect(await prisma.contract.count({ where: { companyId } })).toBe(0);
+  });
+
+  it("requires a feePercent for performance_fee and rejects when missing", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Contrato Sem Fee");
+    const fd = new FormData();
+    fd.set("type", "performance_fee");
+    fd.set("startDate", "2026-01-01");
+
+    const redirectUrl = await expectRedirect(createContract(companyId, fd));
+    expect(redirectUrl).toBe(`/empresas/${companyId}?error=contrato-invalido`);
+    expect(await prisma.contract.count({ where: { companyId } })).toBe(0);
+  });
+
+  it("updates and deletes a contract, blocked for a company mismatch", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Contrato Status");
+    const otherCompanyId = await createTestCompanyId("Empresa Integração Contrato Status Intrusa");
+    const fd = new FormData();
+    fd.set("type", "projeto_avulso");
+    fd.set("value", "30000");
+    fd.set("startDate", "2026-01-01");
+    await expectRedirect(createContract(companyId, fd));
+    const contract = await prisma.contract.findFirstOrThrow({ where: { companyId } });
+
+    const statusFd = new FormData();
+    statusFd.set("status", "encerrado");
+    await expectNotFound(updateContractStatus(otherCompanyId, contract.id, statusFd));
+    await expectRedirect(updateContractStatus(companyId, contract.id, statusFd));
+
+    const updated = await prisma.contract.findUniqueOrThrow({ where: { id: contract.id } });
+    expect(updated.status).toBe("encerrado");
+
+    await expectNotFound(deleteContract(otherCompanyId, contract.id));
+    await expectRedirect(deleteContract(companyId, contract.id));
+    expect(await prisma.contract.findUnique({ where: { id: contract.id } })).toBeNull();
+  });
+});
+
+describe("Apuração de Performance Fee (createPerformanceRecord/deletePerformanceRecord)", () => {
+  it("computes feeValue from gainValue and the contract's feePercent, and freezes it", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Performance Fee");
+    const contractFd = new FormData();
+    contractFd.set("type", "performance_fee");
+    contractFd.set("feePercent", "10");
+    contractFd.set("startDate", "2026-01-01");
+    await expectRedirect(createContract(companyId, contractFd));
+    const contract = await prisma.contract.findFirstOrThrow({ where: { companyId } });
+
+    const recordFd = new FormData();
+    recordFd.set("period", "2026-T1");
+    recordFd.set("gainValue", "12000");
+    recordFd.set("notes", "Redução de inadimplência no trimestre");
+    await expectRedirect(createPerformanceRecord(companyId, contract.id, recordFd));
+
+    const record = await prisma.contractPerformanceRecord.findFirstOrThrow({ where: { contractId: contract.id } });
+    expect(record.gainValue).toBe(12000);
+    expect(record.feeValue).toBe(1200); // 10% de 12000
+
+    await expectRedirect(deletePerformanceRecord(companyId, contract.id, record.id));
+    expect(await prisma.contractPerformanceRecord.findUnique({ where: { id: record.id } })).toBeNull();
+  });
+
+  it("rejects an apuração for a contract that is not performance_fee", async () => {
+    const companyId = await createTestCompanyId("Empresa Integração Performance Fee Inválido");
+    const contractFd = new FormData();
+    contractFd.set("type", "mrr");
+    contractFd.set("value", "5000");
+    contractFd.set("startDate", "2026-01-01");
+    await expectRedirect(createContract(companyId, contractFd));
+    const contract = await prisma.contract.findFirstOrThrow({ where: { companyId } });
+
+    const recordFd = new FormData();
+    recordFd.set("period", "2026-T1");
+    recordFd.set("gainValue", "5000");
+    const redirectUrl = await expectRedirect(createPerformanceRecord(companyId, contract.id, recordFd));
+    expect(redirectUrl).toBe(`/empresas/${companyId}?error=contrato-invalido`);
+    expect(await prisma.contractPerformanceRecord.count({ where: { contractId: contract.id } })).toBe(0);
   });
 });

@@ -6,6 +6,7 @@ import { assertCompanyAccess } from "@/lib/access";
 import {
   partnerSchema,
   partnerReferralSchema,
+  partnerCommissionSchema,
   PARTNER_HOMOLOGATION_STATUSES,
   PARTNER_REFERRAL_STATUSES,
 } from "@/lib/validation";
@@ -95,6 +96,35 @@ export async function updatePartnerReferralStatus(companyId: string, referralId:
   if (!referral || referral.companyId !== companyId) notFound();
 
   await prisma.partnerReferral.update({ where: { id: referralId }, data: { status } });
+
+  revalidatePath(`/empresas/${companyId}`);
+  redirect(`/empresas/${companyId}`);
+}
+
+// Comissão da vertical Parceira (plano estratégico: "Comissionamento (%)"
+// como um dos modelos de receita) — separado do status pra não misturar
+// "onde a indicação está" com "quanto a Arca ganha com ela".
+export async function updatePartnerReferralCommission(companyId: string, referralId: string, formData: FormData) {
+  const session = await getSession();
+  if (!session || session.role === "cliente") notFound();
+  assertCompanyAccess(session, companyId);
+
+  const referral = await prisma.partnerReferral.findUnique({ where: { id: referralId } });
+  if (!referral || referral.companyId !== companyId) notFound();
+
+  const rawPercent = String(formData.get("commissionPercent") ?? "").trim();
+  const rawValue = String(formData.get("commissionValue") ?? "").trim();
+
+  const parsed = partnerCommissionSchema.safeParse({
+    commissionPercent: rawPercent === "" ? undefined : rawPercent,
+    commissionValue: rawValue === "" ? undefined : rawValue,
+  });
+  if (!parsed.success) redirect(`/empresas/${companyId}?error=validacao`);
+
+  await prisma.partnerReferral.update({
+    where: { id: referralId },
+    data: { commissionPercent: parsed.data.commissionPercent ?? null, commissionValue: parsed.data.commissionValue ?? null },
+  });
 
   revalidatePath(`/empresas/${companyId}`);
   redirect(`/empresas/${companyId}`);

@@ -12,8 +12,21 @@ import { VERTICALS } from "@/lib/verticals";
 import { getSession } from "@/lib/auth";
 import { deleteCompany, updateOnboardingResponsible, updateContractedVerticals } from "@/app/actions-empresas";
 import { saveOmieCredentials, disconnectOmie, syncOmieFinancials } from "@/app/actions-omie";
-import { createPartnerReferral, updatePartnerReferralStatus, deletePartnerReferral } from "@/app/actions-partners";
-import { PARTNER_REFERRAL_STATUSES } from "@/lib/validation";
+import {
+  createPartnerReferral,
+  updatePartnerReferralStatus,
+  updatePartnerReferralCommission,
+  deletePartnerReferral,
+} from "@/app/actions-partners";
+import {
+  createContract,
+  updateContractStatus,
+  deleteContract,
+  createPerformanceRecord,
+  deletePerformanceRecord,
+} from "@/app/actions-contracts";
+import { PARTNER_REFERRAL_STATUSES, CONTRACT_TYPES, CONTRACT_STATUSES } from "@/lib/validation";
+import { totalActiveMrr } from "@/lib/contracts";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ConfirmButton } from "@/app/components/ConfirmButton";
@@ -45,15 +58,36 @@ const REFERRAL_STATUS_TONE: Record<string, BadgeTone> = {
   perdido: "critical",
 };
 
+const CONTRACT_TYPE_LABEL: Record<string, string> = {
+  setup: "Setup Inicial",
+  mrr: "Mensalidade Fixa (MRR)",
+  performance_fee: "Performance Fee",
+  projeto_avulso: "Projeto Avulso",
+};
+
+const CONTRACT_STATUS_LABEL: Record<string, string> = {
+  ativo: "Ativo",
+  encerrado: "Encerrado",
+  pendente: "Pendente",
+};
+
+const CONTRACT_STATUS_TONE: Record<string, BadgeTone> = {
+  ativo: "good",
+  encerrado: "neutral",
+  pendente: "warning",
+};
+
 const PAGE_ERROR_MESSAGE: Record<string, string> = {
   "omie-validacao": "Informe a App Key e o App Secret da Omie.",
   "omie-credenciais": "Não foi possível conectar à Omie com essas credenciais — confira App Key e App Secret.",
   "omie-desconectado": "Conecte a Omie antes de sincronizar.",
   "parceiro-invalido": "Selecione um parceiro válido.",
+  "contrato-invalido": "Dados do contrato inválidos — confira tipo, valor/percentual e datas.",
 };
 
 const PAGE_SUCCESS_MESSAGE: Record<string, string> = {
   "omie-conectado": "Conectado à Omie com sucesso.",
+  "contrato-criado": "Contrato registrado com sucesso.",
 };
 
 export default async function EmpresaDetailPage({
@@ -79,11 +113,13 @@ export default async function EmpresaDetailPage({
       meetingNotes: { orderBy: { createdAt: "desc" }, take: 2 },
       erpConnections: true,
       partnerReferrals: { orderBy: { createdAt: "desc" }, include: { partner: true } },
+      contracts: { orderBy: { createdAt: "desc" }, include: { performanceRecords: { orderBy: { createdAt: "desc" } } } },
     },
   });
   if (!company) notFound();
 
   const omieConnection = company.erpConnections.find((c) => c.provider === "omie") ?? null;
+  const activeMrr = totalActiveMrr(company.contracts);
 
   const allPartners =
     session?.role !== "cliente" ? await prisma.partner.findMany({ orderBy: { name: "asc" } }) : [];
@@ -337,6 +373,164 @@ export default async function EmpresaDetailPage({
           <Card>
             <div className="flex items-center justify-between gap-3 mb-3">
               <h2 className="flex items-center gap-1.5 font-semibold text-slate-900">
+                <DocumentIcon className="w-4 h-4 text-slate-400" />
+                Contratos
+              </h2>
+              {activeMrr > 0 && (
+                <Badge text={`R$ ${activeMrr.toLocaleString("pt-BR")}/mês em MRR ativo`} tone="good" />
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Estrutura de receita Arca BTO — Setup Inicial, Mensalidade Fixa (MRR), Performance Fee e
+              Projetos Avulsos. Registro comercial da Arca, não aparece pro cliente.
+            </p>
+            <form action={createContract.bind(null, id)} className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-600 mb-1">Tipo de contrato</span>
+                <select name="type" required defaultValue="setup" className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm bg-white">
+                  {CONTRACT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {CONTRACT_TYPE_LABEL[type]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-600 mb-1">Vertical (opcional)</span>
+                <select name="verticalKey" defaultValue="" className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm bg-white">
+                  <option value="">Empresa toda</option>
+                  {VERTICALS.map((v) => (
+                    <option key={v.key} value={v.key}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-600 mb-1">Valor (R$) — Setup/MRR/Projeto avulso</span>
+                <input type="number" name="value" min={0} step="0.01" placeholder="Ex.: 15000" className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-600 mb-1">% Performance Fee — só esse tipo</span>
+                <input type="number" name="feePercent" min={0} max={100} step="0.1" placeholder="Ex.: 10" className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-600 mb-1">Início</span>
+                <input type="date" name="startDate" required className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-slate-600 mb-1">Fim (opcional)</span>
+                <input type="date" name="endDate" className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm" />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="block text-xs font-medium text-slate-600 mb-1">Observações (opcional)</span>
+                <input type="text" name="notes" className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm" />
+              </label>
+              <SubmitButton
+                pendingText="Registrando..."
+                className="rounded-lg bg-blue-700 text-white text-sm font-semibold px-4 py-2 hover:bg-blue-800 transition-colors sm:col-span-2 self-start"
+              >
+                + Registrar contrato
+              </SubmitButton>
+            </form>
+
+            {company.contracts.length === 0 ? (
+              <p className="text-xs text-slate-400">Nenhum contrato registrado ainda.</p>
+            ) : (
+              <div className="space-y-3">
+                {company.contracts.map((c) => {
+                  const vertical = c.verticalKey ? VERTICALS.find((v) => v.key === c.verticalKey) : null;
+                  return (
+                    <div key={c.id} className="rounded-lg border border-slate-200 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800">
+                            {CONTRACT_TYPE_LABEL[c.type]}
+                            {vertical && <span className="text-slate-400"> · {vertical.name}</span>}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {c.type === "performance_fee"
+                              ? `${c.feePercent}% sobre o ganho apurado`
+                              : `R$ ${c.value?.toLocaleString("pt-BR")}${c.type === "mrr" ? "/mês" : ""}`}
+                            {" · desde "}
+                            {new Date(c.startDate).toLocaleDateString("pt-BR")}
+                            {c.endDate && ` até ${new Date(c.endDate).toLocaleDateString("pt-BR")}`}
+                          </p>
+                          {c.notes && <p className="text-xs text-slate-400 mt-0.5">{c.notes}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge text={CONTRACT_STATUS_LABEL[c.status]} tone={CONTRACT_STATUS_TONE[c.status]} />
+                          <form action={updateContractStatus.bind(null, id, c.id)} className="flex items-center gap-1">
+                            <select
+                              name="status"
+                              defaultValue={c.status}
+                              aria-label={`Status do contrato ${CONTRACT_TYPE_LABEL[c.type]}`}
+                              className="rounded-md border border-slate-300 px-1.5 py-1 text-xs bg-white"
+                            >
+                              {CONTRACT_STATUSES.map((status) => (
+                                <option key={status} value={status}>
+                                  {CONTRACT_STATUS_LABEL[status]}
+                                </option>
+                              ))}
+                            </select>
+                            <SubmitButton pendingText="..." className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors">
+                              Salvar
+                            </SubmitButton>
+                          </form>
+                          <form action={deleteContract.bind(null, id, c.id)}>
+                            <SubmitButton pendingText="..." className="text-xs text-red-600 hover:underline disabled:no-underline">
+                              Remover
+                            </SubmitButton>
+                          </form>
+                        </div>
+                      </div>
+
+                      {c.type === "performance_fee" && (
+                        <div className="mt-3 pt-3 border-t border-slate-100">
+                          <p className="text-xs font-semibold text-slate-600 mb-2">Apuração por período</p>
+                          {c.performanceRecords.length > 0 && (
+                            <div className="space-y-1.5 mb-2">
+                              {c.performanceRecords.map((r) => (
+                                <div key={r.id} className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                                  <span>
+                                    <strong className="text-slate-800">{r.period}</strong> — ganho R${" "}
+                                    {r.gainValue.toLocaleString("pt-BR")} → fee R$ {r.feeValue.toLocaleString("pt-BR")}
+                                    {r.notes && ` · ${r.notes}`}
+                                  </span>
+                                  <form action={deletePerformanceRecord.bind(null, id, c.id, r.id)}>
+                                    <SubmitButton pendingText="..." className="text-red-600 hover:underline disabled:no-underline shrink-0">
+                                      Remover
+                                    </SubmitButton>
+                                  </form>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <form
+                            action={createPerformanceRecord.bind(null, id, c.id)}
+                            className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-1.5"
+                          >
+                            <input name="period" placeholder="Ex.: 2026-T1" required className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
+                            <input name="gainValue" type="number" min={0} step="0.01" placeholder="Ganho apurado (R$)" required className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
+                            <input name="notes" placeholder="Observação (opcional)" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
+                            <SubmitButton pendingText="..." className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1.5 hover:bg-slate-100 transition-colors">
+                              Apurar
+                            </SubmitButton>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {session?.role !== "cliente" && (
+          <Card>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="flex items-center gap-1.5 font-semibold text-slate-900">
                 <HandshakeIcon className="w-4 h-4 text-slate-400" />
                 Parceiros indicados
               </h2>
@@ -383,47 +577,76 @@ export default async function EmpresaDetailPage({
             ) : (
               <div className="space-y-2">
                 {company.partnerReferrals.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800">
-                        {r.partner.name} <span className="text-xs text-slate-400">({r.partner.category})</span>
-                      </p>
-                      {r.notes && <p className="text-xs text-slate-500">{r.notes}</p>}
+                  <div key={r.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-800">
+                          {r.partner.name} <span className="text-xs text-slate-400">({r.partner.category})</span>
+                        </p>
+                        {r.notes && <p className="text-xs text-slate-500">{r.notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge text={REFERRAL_STATUS_LABEL[r.status]} tone={REFERRAL_STATUS_TONE[r.status]} />
+                        <form action={updatePartnerReferralStatus.bind(null, id, r.id)} className="flex items-center gap-1">
+                          <select
+                            name="status"
+                            defaultValue={r.status}
+                            aria-label={`Status da indicação de ${r.partner.name}`}
+                            className="rounded-md border border-slate-300 px-1.5 py-1 text-xs bg-white"
+                          >
+                            {PARTNER_REFERRAL_STATUSES.map((status) => (
+                              <option key={status} value={status}>
+                                {REFERRAL_STATUS_LABEL[status]}
+                              </option>
+                            ))}
+                          </select>
+                          <SubmitButton
+                            pendingText="..."
+                            className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors"
+                          >
+                            Salvar
+                          </SubmitButton>
+                        </form>
+                        <form action={deletePartnerReferral.bind(null, id, r.id)}>
+                          <SubmitButton
+                            pendingText="..."
+                            className="text-xs text-red-600 hover:underline disabled:no-underline"
+                          >
+                            Remover
+                          </SubmitButton>
+                        </form>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge text={REFERRAL_STATUS_LABEL[r.status]} tone={REFERRAL_STATUS_TONE[r.status]} />
-                      <form action={updatePartnerReferralStatus.bind(null, id, r.id)} className="flex items-center gap-1">
-                        <select
-                          name="status"
-                          defaultValue={r.status}
-                          aria-label={`Status da indicação de ${r.partner.name}`}
-                          className="rounded-md border border-slate-300 px-1.5 py-1 text-xs bg-white"
-                        >
-                          {PARTNER_REFERRAL_STATUSES.map((status) => (
-                            <option key={status} value={status}>
-                              {REFERRAL_STATUS_LABEL[status]}
-                            </option>
-                          ))}
-                        </select>
-                        <SubmitButton
-                          pendingText="..."
-                          className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors"
-                        >
-                          Salvar
-                        </SubmitButton>
-                      </form>
-                      <form action={deletePartnerReferral.bind(null, id, r.id)}>
-                        <SubmitButton
-                          pendingText="..."
-                          className="text-xs text-red-600 hover:underline disabled:no-underline"
-                        >
-                          Remover
-                        </SubmitButton>
-                      </form>
-                    </div>
+                    <form
+                      action={updatePartnerReferralCommission.bind(null, id, r.id)}
+                      className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100"
+                    >
+                      <span className="text-[11px] text-slate-400">Comissão:</span>
+                      <input
+                        type="number"
+                        name="commissionPercent"
+                        min={0}
+                        max={100}
+                        step="0.1"
+                        placeholder="%"
+                        defaultValue={r.commissionPercent ?? ""}
+                        aria-label={`Percentual de comissão de ${r.partner.name}`}
+                        className="w-16 rounded-md border border-slate-300 px-1.5 py-1 text-xs"
+                      />
+                      <input
+                        type="number"
+                        name="commissionValue"
+                        min={0}
+                        step="0.01"
+                        placeholder="R$ apurado"
+                        defaultValue={r.commissionValue ?? ""}
+                        aria-label={`Valor de comissão apurado de ${r.partner.name}`}
+                        className="w-28 rounded-md border border-slate-300 px-1.5 py-1 text-xs"
+                      />
+                      <SubmitButton pendingText="..." className="rounded-md border border-slate-300 text-xs font-semibold px-2 py-1 hover:bg-slate-100 transition-colors">
+                        Salvar
+                      </SubmitButton>
+                    </form>
                   </div>
                 ))}
               </div>

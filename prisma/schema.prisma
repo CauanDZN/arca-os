@@ -56,6 +56,47 @@ model Company {
   monthlyReports              MonthlyReport[] // scorecard mensal gerado pelo cron do Comitê de Gestão
   documentTransactions        DocumentTransaction[] // Agente de Extração Financeira — transações extraídas de extratos no Data Room
   partnerReferrals            PartnerReferral[] // indicações de parceiro recebidas por essa empresa (vertical Parceira)
+  contracts                   Contract[] // Estrutura de receita (plano estratégico, p. 24) — setup, MRR, performance fee, projeto avulso
+}
+
+// Estrutura de receita Arca BTO (plano estratégico, p. 24): 4 tipos de
+// contrato complementares. "value" é o valor em R$ pra setup/mrr/
+// projeto_avulso; performance_fee não tem valor fixo — só um percentual
+// sobre o ganho apurado periodicamente (ver ContractPerformanceRecord).
+model Contract {
+  id                 String                      @id @default(cuid())
+  companyId          String
+  company            Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type               String // setup | mrr | performance_fee | projeto_avulso
+  verticalKey        String? // vertical específica coberta (lib/verticals.ts) — null cobre a empresa toda ou várias
+  value              Float? // R$: setup (à vista), mrr (mensal), projeto_avulso (escopo fechado) — null pra performance_fee
+  feePercent         Float? // % sobre o ganho apurado (plano: 5–15%) — só performance_fee
+  status             String                      @default("ativo") // ativo | encerrado | pendente
+  startDate          DateTime
+  endDate            DateTime?
+  notes              String                      @default("")
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  performanceRecords ContractPerformanceRecord[]
+}
+
+// Apuração periódica (trimestral ou semestral, conforme o plano) de um
+// contrato performance_fee. gainValue é o ganho em R$ que o cliente teve
+// no período — dado real, entra manual porque não existe uma fonte única
+// e confiável no sistema pra "economia gerada" (poderia vir de KpiEntry,
+// mas a direção de melhora varia por indicador — nota fiscal errada de
+// direção calcularia comissão errada, então fica com quem tem o contexto).
+// feeValue é só gainValue * feePercent / 100, calculado e congelado na
+// hora — não recalcula se o feePercent do contrato mudar depois.
+model ContractPerformanceRecord {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  period     String // texto livre — "2026-T1", "2026-S1" etc, conforme a cadência combinada
+  gainValue  Float
+  feeValue   Float
+  notes      String   @default("")
+  createdAt  DateTime @default(now())
 }
 
 // Vertical Parceira (plano estratégico, p. 16) — não é uma vertical de
@@ -75,14 +116,16 @@ model Partner {
 }
 
 model PartnerReferral {
-  id        String   @id @default(cuid())
-  partnerId String
-  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  status    String   @default("indicado") // indicado | em_andamento | concluido | perdido
-  notes     String   @default("")
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  partnerId         String
+  partner           Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  companyId         String
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status            String   @default("indicado") // indicado | em_andamento | concluido | perdido
+  notes             String   @default("")
+  commissionPercent Float? // % de comissão negociada com o parceiro sobre esta indicação
+  commissionValue   Float? // valor apurado em R$ — preenchido quando a indicação vira negócio (status concluido)
+  createdAt         DateTime @default(now())
 }
 
 // Um provedor de ERP por empresa (@@unique). Antes disso era Company.omieAppKey/

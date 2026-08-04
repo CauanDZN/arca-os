@@ -108,6 +108,53 @@ export const partnerReferralSchema = z.object({
   notes: optionalTrimmedString(300),
 });
 
+export const partnerCommissionSchema = z.object({
+  commissionPercent: z.coerce.number().min(0).max(100).optional(),
+  commissionValue: z.coerce.number().min(0).optional(),
+});
+
+// Estrutura de receita Arca BTO (plano estratégico, p. 24). value é
+// obrigatório pra todos os tipos exceto performance_fee, que usa feePercent
+// no lugar — os dois .refine cobrem essa dependência cruzada que um enum
+// simples não expressa.
+export const CONTRACT_TYPES = ["setup", "mrr", "performance_fee", "projeto_avulso"] as const;
+export const CONTRACT_STATUSES = ["ativo", "encerrado", "pendente"] as const;
+
+export const contractSchema = z
+  .object({
+    type: z.enum(CONTRACT_TYPES),
+    verticalKey: optionalTrimmedString(40).transform((v) => (v === "" ? null : v)),
+    value: z.coerce.number().min(0).optional(),
+    feePercent: z.coerce.number().min(0).max(100).optional(),
+    status: z.enum(CONTRACT_STATUSES).default("ativo"),
+    startDate: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Data de início inválida"),
+    endDate: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || !Number.isNaN(Date.parse(v)), "Data de fim inválida")
+      .default(""),
+    notes: optionalTrimmedString(300),
+  })
+  .transform((v) => ({
+    ...v,
+    startDate: new Date(v.startDate),
+    endDate: v.endDate === "" ? null : new Date(v.endDate),
+  }))
+  .refine((v) => v.type !== "performance_fee" || (v.feePercent != null && v.feePercent > 0), {
+    message: "Informe o percentual do performance fee.",
+    path: ["feePercent"],
+  })
+  .refine((v) => v.type === "performance_fee" || (v.value != null && v.value > 0), {
+    message: "Informe o valor do contrato.",
+    path: ["value"],
+  });
+
+export const contractPerformanceRecordSchema = z.object({
+  period: z.string().trim().min(1, "Informe o período.").max(20),
+  gainValue: z.coerce.number().min(0.01, "Informe o ganho apurado."),
+  notes: optionalTrimmedString(300),
+});
+
 // Revisão humana da narrativa de IA antes da aprovação do plano — o sumário é
 // um campo só, os insights por área chegam como arrays paralelos (areaKey[],
 // causaRaiz[], recomendacao[]) porque o form tem um bloco repetido por área.

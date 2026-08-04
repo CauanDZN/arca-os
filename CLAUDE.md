@@ -71,8 +71,19 @@ visão geral, stack, checklist de features e como rodar — não repita esse con
   (`lib/omie.ts` + `app/actions-omie.ts`), mas TOTVS/Voalle (citados no diagrama do plano
   estratégico) entram como uma nova `provider` sem migration de schema. Antes disso era
   `Company.omieAppKey`/`omieAppSecret` — migrado via `20260803200403_generalize_erp_connections`
-  (cria a tabela, faz backfill das credenciais existentes, só then derruba as colunas antigas — sem
+  (cria a tabela, faz backfill das credenciais existentes, só depois derruba as colunas antigas — sem
   isso qualquer empresa já conectada perderia a credencial).
+- **Estrutura de receita (`Contract` + `ContractPerformanceRecord`, `app/actions-contracts.ts`)** —
+  os 4 tipos de contrato do plano estratégico (Setup Inicial, MRR, Performance Fee, Projeto Avulso).
+  `value` é obrigatório pra todos exceto `performance_fee`, que usa `feePercent` no lugar — dois
+  `.refine()` cruzados em `contractSchema` (`lib/validation.ts`) cobrem essa dependência. A apuração
+  de Performance Fee é **deliberadamente manual**: `gainValue` (o ganho em R$ do cliente no período)
+  não vem de `KpiEntry` porque a direção de "melhora" varia por indicador (Inadimplência caindo é
+  bom, Receita caindo é ruim) — adivinhar errado calcularia comissão errada. Só a multiplicação
+  `gainValue × feePercent` é automatizada (`lib/contracts.ts`, testado). Mesma lógica pra comissão de
+  parceiro: `PartnerReferral.commissionPercent`/`commissionValue` são entrada manual, não calculados.
+  `lib/contracts.ts` também tem `totalActiveMrr()`, mostrado como badge no card de Contratos da
+  empresa.
 
 ## Suíte de testes — como funciona e armadilhas
 
