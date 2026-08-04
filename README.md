@@ -24,6 +24,31 @@ mostra também um **Selo de Nível de Serviço** (Diagnóstico → Execução �
 — eixo diferente da maturidade 1–5, que mede em que estágio da relação comercial a Arca está com
 aquela empresa naquela vertical.
 
+## Para quem está chegando agora no projeto
+
+O código tem um bom volume de arquivos e decisões não óbvias — antes de sair navegando, três
+lugares concentram praticamente tudo que você vai precisar saber:
+
+- **Este README** — visão geral, stack, como rodar, estrutura de pastas, o que é mock e o que é
+  real.
+- **[`CLAUDE.md`](CLAUDE.md)** — o "porquê" de cada decisão de arquitetura não óbvia (por que
+  Postgres e não SQLite, por que `@react-pdf/renderer` e não Puppeteer, por que o Performance Fee é
+  apurado manualmente, as armadilhas da suíte de testes...). Foi escrito pra um assistente de IA
+  continuar o projeto, mas é exatamente o tipo de contexto que um dev novo também precisa — leia
+  como se fosse um `ARCHITECTURE.md`.
+- **[`docs/`](docs/)** — referência do que **não** é óbvio só lendo o código de uma vez:
+  - [`docs/SERVER_ACTIONS.md`](docs/SERVER_ACTIONS.md) — catálogo das 64 Server Actions (a "API"
+    real do sistema, já que não existem rotas REST): o que cada uma faz, quem pode chamar.
+  - [`docs/API.md`](docs/API.md) — as 6 rotas HTTP que de fato existem (download de PDF/CSV/
+    documento, cron, webhook) e os eventos que o ArcaOS dispara pra fora.
+  - [`docs/OMIE.md`](docs/OMIE.md) — exatamente quais endpoints da API da Omie são consumidos hoje.
+
+**Não existe Swagger porque não existe API REST tradicional aqui** — o ArcaOS é Next.js (App
+Router) com Server Actions, não um backend NestJS/Express com controllers decorados. A grande
+maioria das mutações do sistema é uma função `"use server"` chamada direto de um `<form>`, sem URL
+nem verbo HTTP pra documentar em OpenAPI. `docs/SERVER_ACTIONS.md` é o equivalente real pra esse
+formato.
+
 ## Stack
 
 | Camada | Tecnologia | Por quê |
