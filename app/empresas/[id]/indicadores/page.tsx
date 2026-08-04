@@ -10,8 +10,11 @@ import {
   generatePerformanceInsightAction,
 } from "@/app/actions-kpis";
 import { findKpiAlerts } from "@/lib/strategic-alerts";
+import { VERTICALS } from "@/lib/verticals";
+import { suggestionsForVertical } from "@/lib/kpi-targets";
 import { Card } from "@/app/components/Card";
 import { SubmitButton } from "@/app/components/SubmitButton";
+import { KpiSuggestions } from "@/app/components/KpiSuggestions";
 import { EmptyBoxIcon, TrendingUpIcon, SparklesIcon } from "@/app/components/icons";
 
 const OMIE_ERROR_MESSAGE: Record<string, string> = {
@@ -57,6 +60,13 @@ export default async function IndicadoresPage({
   }));
   const kpiAlerts = findKpiAlerts(entriesForAgents);
   const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
+
+  const contractedVerticalKeys: string[] = JSON.parse(company.contractedVerticals || "[]");
+  const relevantVerticals =
+    contractedVerticalKeys.length > 0 ? VERTICALS.filter((v) => contractedVerticalKeys.includes(v.key)) : VERTICALS;
+  const suggestionsByVertical = relevantVerticals
+    .map((v) => ({ verticalName: v.name, suggestions: suggestionsForVertical(v.key) }))
+    .filter((g) => g.suggestions.length > 0);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
@@ -110,6 +120,7 @@ export default async function IndicadoresPage({
                 ))}
               </select>
             </label>
+            <KpiSuggestions suggestionsByVertical={suggestionsByVertical} />
             <label className="block">
               <span className="block text-xs font-medium text-slate-600 mb-1">Mês</span>
               <input

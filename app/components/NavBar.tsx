@@ -14,6 +14,7 @@ import {
   UsersIcon,
   PortalIcon,
   HandshakeIcon,
+  CompassIcon,
 } from "@/app/components/icons";
 
 const LINKS = [
@@ -24,6 +25,7 @@ const LINKS = [
   { href: "/agentes", label: "Agentes de IA", icon: SparklesIcon, roles: ["admin", "consultor", "cliente"] },
   { href: "/integracoes", label: "Integrações", icon: PlugIcon, roles: ["admin", "consultor", "cliente"] },
   { href: "/parceiros", label: "Parceiros", icon: HandshakeIcon, roles: ["admin", "consultor"] },
+  { href: "/metodologia", label: "Metodologia", icon: CompassIcon, roles: ["admin", "consultor", "cliente"] },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -41,6 +43,9 @@ export function NavBar({ session }: { session: Session | null }) {
 
   const links = [
     ...LINKS.filter((link) => link.roles.includes(session?.role ?? "")),
+    ...(session?.role === "admin" || session?.role === "consultor"
+      ? [{ href: "/organograma", label: "Organograma", icon: UsersIcon }]
+      : []),
     ...(session?.role === "admin" ? [{ href: "/usuarios", label: "Usuários", icon: UsersIcon }] : []),
   ];
 

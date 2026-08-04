@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getVerticalByKey, VERTICALS } from "@/lib/verticals";
 import { getAreaByKey } from "@/lib/areas";
 import { buildVerticalReport } from "@/lib/vertical-diagnostic";
+import { determineServiceTierLevel, getServiceTier, SERVICE_TIER_LEVELS } from "@/lib/service-tier";
 import { statusTone } from "@/lib/badge-tones";
 import { getSession } from "@/lib/auth";
 import { assertCompanyAccess, assertVerticalAccess } from "@/lib/access";
@@ -46,6 +47,7 @@ export default async function ModuloVerticalPage({
         orderBy: { createdAt: "desc" },
         include: { transactions: true },
       },
+      kpiEntries: { where: { areaKey: { in: vertical.areaKeys } }, select: { id: true }, take: 1 },
     },
   });
   if (!company) notFound();
@@ -55,6 +57,13 @@ export default async function ModuloVerticalPage({
   const startAction = startVerticalDiagnostic.bind(null, id, verticalKey);
   const uploadAction = uploadDocument.bind(null, id);
   const hasFinanceiro = vertical.areaKeys.includes("financeiro");
+
+  const serviceTierLevel = determineServiceTierLevel({
+    hasCompletedDiagnostic: Boolean(latestCompleted),
+    hasApprovedPlan: company.diagnostics.some((d) => d.tasks.length > 0),
+    hasKpiTracking: company.kpiEntries.length > 0,
+  });
+  const currentTier = getServiceTier(serviceTierLevel);
 
   return (
     <main className="flex-1 bg-slate-50 py-10 px-4">
@@ -75,6 +84,41 @@ export default async function ModuloVerticalPage({
             {vertical.description} Diagnóstico, Data Room, agentes e relatório próprios desta
             vertical, sem depender das outras contratadas ou não pela empresa.
           </p>
+
+          <div className="flex flex-wrap items-stretch gap-2 mb-4">
+            {SERVICE_TIER_LEVELS.map((level) => {
+              const tier = getServiceTier(level);
+              const isCurrent = level === serviceTierLevel;
+              const isReached = level <= serviceTierLevel;
+              return (
+                <div
+                  key={level}
+                  className={`flex-1 min-w-36 rounded-lg border px-3 py-2 ${
+                    isCurrent
+                      ? "border-blue-600 bg-blue-50"
+                      : isReached
+                        ? "border-blue-200 bg-blue-50/40"
+                        : level === 4
+                          ? "border-dashed border-slate-200 bg-slate-50"
+                          : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <p className={`text-[11px] font-semibold uppercase tracking-wide ${isCurrent ? "text-blue-700" : "text-slate-400"}`}>
+                    Nível {level}
+                    {isCurrent && " · atual"}
+                  </p>
+                  <p className={`text-sm font-medium ${isCurrent ? "text-blue-900" : "text-slate-600"}`}>{tier.label}</p>
+                  {level === 4 && (
+                    <p className="text-[11px] text-slate-400 mt-0.5">Sob avaliação da Arca</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-slate-500 -mt-2 mb-4">
+            Nível de serviço atual: <strong>{currentTier.label}</strong> — {currentTier.description}
+          </p>
+
           {inProgress ? (
             <Link
               href={`/diagnostico/${inProgress.id}/questionario/${vertical.areaKeys[0]}`}

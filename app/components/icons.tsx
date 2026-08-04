@@ -47,6 +47,15 @@ export function SparklesIcon({ className = "w-4 h-4" }: IconProps) {
   );
 }
 
+export function CompassIcon({ className = "w-4 h-4" }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.8 9.2 13 13l-3.8 1.8L11 11l3.8-1.8Z" />
+    </svg>
+  );
+}
+
 export function PlugIcon({ className = "w-4 h-4" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>

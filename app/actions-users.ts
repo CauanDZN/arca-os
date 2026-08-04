@@ -5,6 +5,7 @@ import { userSchema } from "@/lib/validation";
 import { getSession } from "@/lib/auth";
 import type { Session } from "@/lib/session";
 import { VERTICALS } from "@/lib/verticals";
+import { isSeniority } from "@/lib/seniority";
 import { redirect, notFound } from "next/navigation";
 
 const VERTICAL_KEYS = new Set(VERTICALS.map((v) => v.key));
@@ -16,6 +17,14 @@ function resolveAssignedVerticals(role: string, formData: FormData): string {
   if (role !== "consultor") return "[]";
   const selected = formData.getAll("assignedVerticals").map(String).filter((key) => VERTICAL_KEYS.has(key));
   return JSON.stringify(selected);
+}
+
+// Mesmo raciocínio de resolveAssignedVerticals: senioridade só faz sentido
+// pra consultor (é o organograma da equipe da Arca, não do cliente/admin).
+function resolveSeniority(role: string, formData: FormData): string {
+  if (role !== "consultor") return "";
+  const raw = String(formData.get("seniority") ?? "");
+  return isSeniority(raw) ? raw : "";
 }
 
 async function requireAdmin(): Promise<Session> {
@@ -54,8 +63,9 @@ export async function createUser(formData: FormData) {
 
   const companyId = await resolveCompanyId(parsed.data.role, parsed.data.companyId);
   const assignedVerticals = resolveAssignedVerticals(parsed.data.role, formData);
+  const seniority = resolveSeniority(parsed.data.role, formData);
 
-  await prisma.user.create({ data: { ...parsed.data, email, companyId, assignedVerticals } });
+  await prisma.user.create({ data: { ...parsed.data, email, companyId, assignedVerticals, seniority } });
   redirect("/usuarios?sucesso=criado");
 }
 
@@ -70,8 +80,9 @@ export async function updateUserRole(userId: string, formData: FormData) {
   const rawCompanyId = String(formData.get("companyId") ?? "").trim();
   const companyId = await resolveCompanyId(role, rawCompanyId === "" ? null : rawCompanyId);
   const assignedVerticals = resolveAssignedVerticals(role, formData);
+  const seniority = resolveSeniority(role, formData);
 
-  await prisma.user.update({ where: { id: userId }, data: { role, companyId, assignedVerticals } });
+  await prisma.user.update({ where: { id: userId }, data: { role, companyId, assignedVerticals, seniority } });
   redirect("/usuarios");
 }
 

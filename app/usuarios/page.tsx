@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { createUser, updateUserRole, deleteUser } from "@/app/actions-users";
+import Link from "next/link";
 import { VERTICALS } from "@/lib/verticals";
+import { SENIORITY_LEVELS, SENIORITY_LABEL, isSeniority } from "@/lib/seniority";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { ConfirmButton } from "@/app/components/ConfirmButton";
@@ -64,6 +66,9 @@ export default async function UsuariosPage({
             <code>add_users</code>). O login consulta esta tabela — criar, mudar o cargo ou excluir
             um usuário tem efeito imediato.
           </p>
+          <Link href="/organograma" className="inline-block mt-2 text-sm font-medium text-blue-700 hover:underline">
+            Ver organograma por vertical →
+          </Link>
         </Card>
 
         {error && (
@@ -148,6 +153,23 @@ export default async function UsuariosPage({
                 ))}
               </select>
             </label>
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-600 mb-1">
+                Senioridade (só Consultor — organograma)
+              </span>
+              <select
+                name="seniority"
+                defaultValue=""
+                className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm bg-white"
+              >
+                <option value="">Não classificado</option>
+                {SENIORITY_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {SENIORITY_LABEL[level]}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="block sm:col-span-2">
               <span className="block text-xs font-medium text-slate-600 mb-1">
                 Verticais atribuídas (só Consultor — vazio = vê a carteira inteira)
@@ -202,7 +224,7 @@ export default async function UsuariosPage({
                   )}
                   {u.role === "consultor" && (
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Escopo:{" "}
+                      {isSeniority(u.seniority) ? SENIORITY_LABEL[u.seniority] : "Sem senioridade"} · Escopo:{" "}
                       {userAssignedVerticals.length === 0
                         ? "carteira inteira"
                         : userAssignedVerticals
@@ -254,6 +276,20 @@ export default async function UsuariosPage({
                       {VERTICALS.map((v) => (
                         <option key={v.key} value={v.key}>
                           {v.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      name="seniority"
+                      defaultValue={u.seniority}
+                      aria-label={`Senioridade de ${u.name}`}
+                      title="Senioridade (só Consultor — organograma)"
+                      className="rounded-md border border-slate-300 px-1.5 py-1 text-xs focus:outline-none bg-white"
+                    >
+                      <option value="">Não classificado</option>
+                      {SENIORITY_LEVELS.map((level) => (
+                        <option key={level} value={level}>
+                          {SENIORITY_LABEL[level]}
                         </option>
                       ))}
                     </select>

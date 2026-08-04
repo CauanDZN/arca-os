@@ -16,7 +16,8 @@ model User {
   email     String   @unique
   password  String // texto puro de propósito — login mockado, não um cofre de credenciais real
   role      String   @default("consultor") // admin | consultor | cliente
-  title     String   @default("") // cargo na visão organizacional da Arca (seção 16 do pitch do Cícero)
+  title     String   @default("") // cargo livre exibido na NavBar (seção 16 do pitch do Cícero) — texto solto, não agrupável
+  seniority String   @default("") // "" | socio | gerente | coordenador | analista | assistente — só role "consultor". Nível estruturado do organograma por vertical (plano estratégico, p. 22); "" = não classificado, fica fora do organograma
   companyId String? // vínculo real com uma empresa (role "cliente") — definido na tela /usuarios
   assignedVerticals String @default("[]") // JSON-encoded array de chaves de lib/verticals.ts — só role "consultor". Vazio = sem escopo, vê a carteira inteira (equipe pequena/admin); preenchido restringe a lista de empresas e o acesso a /empresas/[id]/modulo/[x] às verticais atribuídas (organograma por vertical do plano estratégico, p. 22)
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
